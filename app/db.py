@@ -36,6 +36,13 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def ensure_aware(dt: datetime | None) -> datetime | None:
+    """SQLite drops tzinfo on read; re-tag naive datetimes as UTC for comparison."""
+    if dt is not None and dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 def normalize_database_url(url: str) -> str:
     """Map Render's ``postgres://`` scheme to the psycopg3 SQLAlchemy dialect."""
     if url.startswith("postgres://"):

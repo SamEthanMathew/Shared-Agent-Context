@@ -243,6 +243,19 @@ class ProjectStore:
             )
         return conn_id
 
+    def find_active_connection_for_client(
+        self, user_id: str, oauth_client_id: str
+    ) -> dict[str, Any] | None:
+        with self.engine.begin() as conn:
+            row = conn.execute(
+                select(agent_connections).where(
+                    agent_connections.c.user_id == user_id,
+                    agent_connections.c.oauth_client_id == oauth_client_id,
+                    agent_connections.c.revoked_at.is_(None),
+                )
+            ).first()
+        return dict(row._mapping) if row else None
+
     def get_agent_connection(self, conn_id: str) -> dict[str, Any] | None:
         with self.engine.begin() as conn:
             row = conn.execute(

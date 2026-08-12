@@ -11,6 +11,7 @@ from sqlalchemy.engine import Engine
 
 from ..db import create_sac_engine, metadata
 from ..identity import Principal, RequestIdentity
+from ..auth.store import AuthStore
 from .audit import AuditStore
 from .memories import MemoryStore
 from .projects import ProjectStore
@@ -26,6 +27,7 @@ class SACStore:
         self.sessions = SessionStore(self.engine)
         self.memories = MemoryStore(self.engine, self.projects, self.audit)
         self.snapshots = SnapshotStore(self.engine)
+        self.auth = AuthStore(self.engine)
 
     def init(self) -> None:
         metadata.create_all(self.engine)

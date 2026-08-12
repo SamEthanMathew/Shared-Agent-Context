@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from contextlib import asynccontextmanager
 from typing import Any
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -10,7 +11,9 @@ from mcp.server import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 
 from .api import mcp_tools
+from .api.deps import auth_mode
 from .api.rest import router as v1_router
+from .auth.web import router as auth_router
 from .errors import ConflictError, ForbiddenError, NotFoundError, SACError, ValidationError
 from .runtime import get_store
 
@@ -35,23 +38,67 @@ While an SAC connector is enabled:
 The server decides what you may read and write from your authenticated identity.
 """.strip()
 
+PUBLIC_URL = (os.getenv("SAC_PUBLIC_URL") or os.getenv("RENDER_EXTERNAL_URL") or "").rstrip("/")
+AUTH_ENABLED = auth_mode() != "dev"
+
+# Provider singleton is shared by the MCP auth machinery and the REST bearer
+# middleware, so both surfaces verify tokens the same way.
+provider = None
+if AUTH_ENABLED:
+    from .auth.provider import build_provider
+
+    provider = build_provider()
+
+
+def _transport_security() -> TransportSecuritySettings:
+    hosts_env = os.getenv("SAC_ALLOWED_HOSTS", "")
+    hosts = [h.strip() for h in hosts_env.split(",") if h.strip()]
+    if not hosts and PUBLIC_URL:
+        parsed = urlparse(PUBLIC_URL)
+        host = parsed.hostname
+        if host:
+            # netloc carries the explicit port (local dev); host:443/:80 cover the
+            # implicit-port Host header Render sends behind its TLS proxy.
+            hosts = [host, parsed.netloc, f"{host}:443", f"{host}:80"]
+    if AUTH_ENABLED and hosts:
+        return TransportSecuritySettings(allowed_hosts=hosts)
+    # Dev/local: no assigned hostname to validate against.
+    return TransportSecuritySettings(enable_dns_rebinding_protection=False)
+
 
 def build_mcp() -> MCPServer:
-    mcp = MCPServer("Shared Agent Context", instructions=MCP_INSTRUCTIONS)
+    kwargs: dict[str, Any] = {"instructions": MCP_INSTRUCTIONS}
+    if AUTH_ENABLED and provider is not None:
+        from pydantic import AnyHttpUrl
+        from mcp.server.auth.settings import (
+            AuthSettings,
+            ClientRegistrationOptions,
+            RevocationOptions,
+        )
+
+        kwargs["auth_server_provider"] = provider
+        kwargs["auth"] = AuthSettings(
+            issuer_url=AnyHttpUrl(PUBLIC_URL),
+            resource_server_url=AnyHttpUrl(f"{PUBLIC_URL}/mcp"),
+            required_scopes=["sac.read"],
+            client_registration_options=ClientRegistrationOptions(
+                enabled=True,
+                valid_scopes=["sac.read", "sac.write"],
+                default_scopes=["sac.read", "sac.write"],
+            ),
+            revocation_options=RevocationOptions(enabled=True),
+        )
+    mcp = MCPServer("Shared Agent Context", **kwargs)
     mcp_tools.register(mcp)
     return mcp
 
 
 mcp = build_mcp()
-
-# V1 dev builds are unauthenticated; the OAuth layer (M5) re-enables host
-# validation with the deployment host allowlisted.
-transport_security = TransportSecuritySettings(enable_dns_rebinding_protection=False)
 mcp_app = mcp.streamable_http_app(
     streamable_http_path="/mcp",
     json_response=True,
     stateless_http=True,
-    transport_security=transport_security,
+    transport_security=_transport_security(),
 )
 
 
@@ -59,11 +106,12 @@ mcp_app = mcp.streamable_http_app(
 async def lifespan(app: FastAPI):
     store = get_store()
     store.init()
+    from .auth.bootstrap import bootstrap_admin
+
+    bootstrap_admin(store)
     async with mcp.session_manager.run():
         yield
 
-
-PUBLIC_URL = os.getenv("SAC_PUBLIC_URL") or os.getenv("RENDER_EXTERNAL_URL")
 
 app = FastAPI(
     title="Shared Agent Context",
@@ -78,6 +126,62 @@ app = FastAPI(
 )
 
 app.include_router(v1_router)
+app.include_router(auth_router)
+
+
+if AUTH_ENABLED:
+
+    @app.get("/.well-known/oauth-authorization-server", include_in_schema=False)
+    def authorization_server_metadata() -> JSONResponse:
+        # The SDK's metadata handler doesn't advertise CIMD; inject it so ChatGPT
+        # uses Client ID Metadata Documents instead of falling back to DCR.
+        from pydantic import AnyHttpUrl
+        from mcp.server.auth.routes import build_metadata
+        from mcp.server.auth.settings import ClientRegistrationOptions, RevocationOptions
+
+        metadata = build_metadata(
+            issuer_url=AnyHttpUrl(PUBLIC_URL),
+            service_documentation_url=None,
+            client_registration_options=ClientRegistrationOptions(
+                enabled=True,
+                valid_scopes=["sac.read", "sac.write"],
+                default_scopes=["sac.read", "sac.write"],
+            ),
+            revocation_options=RevocationOptions(enabled=True),
+        )
+        body = metadata.model_dump(exclude_none=True, mode="json")
+        body["client_id_metadata_document_supported"] = True
+        return JSONResponse(body)
+
+    @app.middleware("http")
+    async def rest_bearer_auth(request: Request, call_next):
+        # Protect /v1 with the same token verifier as the MCP surface.
+        if request.url.path.startswith("/v1"):
+            from .identity import Principal
+
+            header = request.headers.get("authorization", "")
+            token = header[7:].strip() if header.lower().startswith("bearer ") else ""
+            access = await provider.load_access_token(token) if token else None
+            if access is None:
+                metadata = f"{PUBLIC_URL}/.well-known/oauth-protected-resource/mcp"
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "authentication required"},
+                    headers={
+                        "WWW-Authenticate": (
+                            f'Bearer error="invalid_token", resource_metadata="{metadata}"'
+                        )
+                    },
+                )
+            claims = access.claims or {}
+            request.state.principal = Principal(
+                user_id=access.subject or claims.get("user_id"),
+                agent_connection_id=claims.get("agent_connection_id"),
+                scopes=tuple(access.scopes or ()),
+                label=claims.get("connection_label", ""),
+            )
+        return await call_next(request)
+
 
 _STATUS = {
     ValidationError: 400,
@@ -91,7 +195,6 @@ _STATUS = {
 async def _sac_error_handler(request: Request, exc: SACError) -> JSONResponse:
     for cls, code in _STATUS.items():
         if isinstance(exc, cls):
-            # Forbidden bodies stay coarse so isolation isn't leaked.
             detail = "forbidden" if code == 403 else str(exc)
             return JSONResponse(status_code=code, content={"detail": detail})
     return JSONResponse(status_code=400, content={"detail": str(exc)})
@@ -100,9 +203,15 @@ async def _sac_error_handler(request: Request, exc: SACError) -> JSONResponse:
 @app.get("/health", include_in_schema=False)
 def health() -> dict[str, Any]:
     store = get_store()
-    return {"ok": True, "mode": "v1_core_engine", "users": store.projects.count_users()}
+    return {
+        "ok": True,
+        "mode": "v1_core_engine",
+        "auth": AUTH_ENABLED,
+        "users": store.projects.count_users(),
+    }
 
 
-# The MCP protocol endpoint is exactly /mcp; the mount at root also lets the SDK
-# publish OAuth discovery routes at the domain root (used once auth lands).
+# The MCP protocol endpoint is exactly /mcp; the root mount also lets the SDK
+# publish OAuth discovery routes (/.well-known/*, /authorize, /token, ...) at the
+# domain root where RFC 8414/9728 require them.
 app.mount("/", mcp_app)
