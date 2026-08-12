@@ -276,5 +276,8 @@ def test_bootstrap_admin(seed, monkeypatch):
     uid = bootstrap_admin(store)
     assert uid is not None
     assert store.auth.verify_login("admin@example.com", "s3cret")["id"] == uid
+    # a starter project is created and owned by the admin
+    project_ids = store.projects.list_user_project_ids(uid)
+    assert len(project_ids) == 1
     # idempotent: second call is a no-op
     assert bootstrap_admin(store) is None
