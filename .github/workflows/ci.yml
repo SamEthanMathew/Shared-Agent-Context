@@ -22,3 +22,11 @@ jobs:
         env:
           PYTHONPATH: .
         run: pytest -q
+      - name: Run Streamable HTTP MCP smoke test
+        env:
+          PYTHONPATH: .
+        run: |
+          uvicorn app.main:app --host 127.0.0.1 --port 8765 > /tmp/sac-uvicorn.log 2>&1 &
+          SAC_PID=$!
+          trap 'kill $SAC_PID 2>/dev/null || true' EXIT
+          python tests/smoke_http_mcp.py || (cat /tmp/sac-uvicorn.log && exit 1)
