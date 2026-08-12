@@ -253,6 +253,7 @@ The project is at the concept / pre-MVP stage.
 
 - [`docs/BUSINESS_PLAN.md`](docs/BUSINESS_PLAN.md) - market, positioning, business model, risks, and go-to-market
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) - proposed technical architecture and memory model
+- [`docs/V0_PRODUCT_ARCHITECTURE.md`](docs/V0_PRODUCT_ARCHITECTURE.md) - concrete first-product architecture for one OpenAI-side user and one Anthropic-side user, including private/shared context pools, per-turn sync, revisions, integration adapters, APIs, schema, build order, acceptance tests, and unresolved research
 - [`docs/RESEARCH_CONTEXT_WINDOWS_AND_MEMORY.md`](docs/RESEARCH_CONTEXT_WINDOWS_AND_MEMORY.md) - research on model context windows, long-context behavior, memory systems, and cross-model interoperability
 - [`docs/RESEARCH_EXPANDING_CONTEXT_WINDOWS_2023_2026.md`](docs/RESEARCH_EXPANDING_CONTEXT_WINDOWS_2023_2026.md) - deep research on how long-context models scale, including positional extension, attention, KV-cache systems, distributed serving, effective-context limits, external memory, and implications for SAC
 - [`docs/HIGH_QUALITY_CONTEXT_WINDOW_ARCHITECTURE.md`](docs/HIGH_QUALITY_CONTEXT_WINDOW_ARCHITECTURE.md) - detailed architecture for constructing high-quality, task-specific model context
