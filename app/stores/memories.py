@@ -330,6 +330,41 @@ class MemoryStore:
 
     # --- read path ----------------------------------------------------------
 
+    def retract(
+        self, identity: RequestIdentity, memory_id: str
+    ) -> MemoryRecord:
+        """Human correction: mark a memory retracted so it leaves active context.
+
+        Retained (not deleted) for provenance. Writer role required; a private
+        memory may only be retracted by its owner.
+        """
+        identity.require_writer()
+        now = utcnow()
+        with self.engine.begin() as conn:
+            m = self._load_writable_target(conn, identity, memory_id)
+            if m["status"] == "retracted":
+                return _row_to_memory(m)
+            new_version = int(m["version"]) + 1
+            conn.execute(
+                update(memories)
+                .where(memories.c.id == memory_id)
+                .values(status="retracted", version=new_version, updated_at=now)
+            )
+            self._insert_version(
+                conn, memory_id, new_version, m["kind"], m["summary"],
+                m["details"] or "", m["tags"] or "", "retracted",
+                m["source_event_id"], identity, now,
+            )
+            self.audit.emit(
+                "memory.retract", "memory", memory_id,
+                project_id=identity.project_id, actor_user_id=identity.user_id,
+                actor_agent_id=identity.agent_connection_id, conn=conn,
+            )
+            row = conn.execute(
+                select(memories).where(memories.c.id == memory_id)
+            ).first()
+        return _row_to_memory(row._mapping)
+
     def get_memory(
         self, project_id: str, memory_id: str, user_id: str
     ) -> MemoryRecord | None:

@@ -14,6 +14,7 @@ from .api import mcp_tools
 from .api.deps import auth_mode
 from .api.rest import router as v1_router
 from .auth.web import router as auth_router
+from .control import router as console_router
 from .errors import ConflictError, ForbiddenError, NotFoundError, SACError, ValidationError
 from .runtime import get_store
 
@@ -127,6 +128,7 @@ app = FastAPI(
 
 app.include_router(v1_router)
 app.include_router(auth_router)
+app.include_router(console_router)
 
 
 if AUTH_ENABLED:
