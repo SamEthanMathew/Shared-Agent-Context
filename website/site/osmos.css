@@ -1,0 +1,48 @@
+:root {
+  --osmos-ink-950: #0B111B;
+  --osmos-ink-900: #111827;
+  --osmos-ink-800: #162033;
+  --osmos-white: #F7FAFF;
+  --osmos-mist: #A9B3C5;
+  --osmos-violet-500: #B02EFF;
+  --osmos-violet-400: #8A4DFF;
+  --osmos-indigo-400: #6666FF;
+  --osmos-blue-400: #3E8CFF;
+  --osmos-aqua-400: #30C4F4;
+  --osmos-flow: linear-gradient(90deg,#B02EFF 0%,#8A4DFF 25%,#6666FF 50%,#3E8CFF 75%,#30C4F4 100%);
+  --osmos-font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --osmos-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --osmos-radius-sm: 8px;
+  --osmos-radius-md: 12px;
+  --osmos-radius-lg: 18px;
+  --osmos-ease: cubic-bezier(0.22,1,0.36,1);
+}
+
+[data-theme="dark"], .osmos-dark {
+  --osmos-bg: var(--osmos-ink-950);
+  --osmos-surface: var(--osmos-ink-900);
+  --osmos-surface-raised: var(--osmos-ink-800);
+  --osmos-text: var(--osmos-white);
+  --osmos-text-muted: var(--osmos-mist);
+  --osmos-border: rgba(169,179,197,.16);
+}
+
+[data-theme="light"], .osmos-light {
+  --osmos-bg: #F7FAFF;
+  --osmos-surface: #FFFFFF;
+  --osmos-surface-raised: #F1F5FA;
+  --osmos-text: #0B111B;
+  --osmos-text-muted: #5F6B7B;
+  --osmos-border: rgba(11,17,27,.12);
+}
+
+.osmos-flow-text {
+  background: var(--osmos-flow);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.osmos-flow-line {
+  background: var(--osmos-flow);
+}

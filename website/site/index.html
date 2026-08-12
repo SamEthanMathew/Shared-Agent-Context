@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Osmos — Shared project context for AI agents</title>
+<meta name="description" content="Keep your team's AI agents working from the same evolving project knowledge across models, accounts, sessions, and tools, with provenance and permissions built in.">
+<link rel="canonical" href="/">
+
+<meta property="og:type" content="website">
+<meta property="og:title" content="Osmos — Shared project context for AI agents">
+<meta property="og:description" content="Different people. Different agents. Same project understanding.">
+<meta property="og:image" content="assets/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Osmos — Shared project context for AI agents">
+<meta name="twitter:description" content="Different people. Different agents. Same project understanding.">
+<meta name="twitter:image" content="assets/og-image.png">
+
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<meta name="color-scheme" content="dark light">
+
+<!-- Theme before paint: avoids a flash of the wrong theme. -->
+<script>
+(function(){try{var t=localStorage.getItem("osmos-theme");if(!t){t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";}document.documentElement.setAttribute("data-theme",t);}catch(e){}})();
+</script>
+
+<link rel="stylesheet" href="osmos.css">
+<link rel="stylesheet" href="styles.css">
+
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Osmos","applicationCategory":"DeveloperApplication","description":"Shared project context for AI agents. Keeps humans and AI agents working from the same continuously updated project knowledge across models, accounts, sessions, and tools.","operatingSystem":"Cross-platform"}
+</script>
+</head>
+
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="nav" id="nav">
+  <div class="container nav__inner">
+    <a class="nav__brand" href="index.html" aria-label="Osmos home">
+      <img class="nav__mark" src="assets/osmos-mark-dark.svg" alt="" width="28" height="28">
+      <span class="nav__word">OSMOS</span>
+    </a>
+    <nav class="nav__links" aria-label="Primary">
+      <a class="nav__link" href="#how">How it works</a>
+      <a class="nav__link" href="#developers">Developers</a>
+      <a class="nav__link" href="security.html">Security</a>
+    </nav>
+    <div class="nav__actions">
+      <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch theme">
+        <svg class="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+      <a class="btn btn--primary btn--sm" href="get-started.html" data-osmos-event="hero_setup_click">Get Osmos</a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+
+  <!-- ================= Hero ================= -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero__inner">
+        <h1 class="t-hero hero__title">Different people. Different agents.<br><span class="flow-text">Same project understanding.</span></h1>
+        <p class="t-lead hero__lead">Osmos keeps your team's AI agents working from the same continuously updated project knowledge — across models, accounts, sessions, and tools.</p>
+        <div class="btn-row hero__ctas">
+          <a class="btn btn--primary" href="get-started.html" data-osmos-event="hero_setup_click">Get Osmos</a>
+          <a class="btn btn--secondary" href="#moment" data-osmos-event="hero_demo_replay">Watch the handoff</a>
+        </div>
+        <p class="hero__tertiary">
+          <a href="https://github.com/SamEthanMathew/Shared-Agent-Context" data-osmos-event="github_click">View source</a>
+          <a href="security.html">How permissions work</a>
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= Interactive Osmos Moment ================= -->
+  <section class="section--tight" id="moment" aria-labelledby="moment-h">
+    <div class="container">
+      <h2 class="visually-hidden" id="moment-h">A context handoff between two agents</h2>
+
+      <div class="moment" id="osmos-moment" data-phase="idle" data-mode="with">
+        <div class="moment__stage">
+
+          <article class="agent" data-role="source" aria-label="Sam, using ChatGPT">
+            <div class="agent__head">
+              <span class="agent__avatar" aria-hidden="true">SM</span>
+              <span>
+                <span class="agent__who">Sam</span><br>
+                <span class="agent__tool">ChatGPT</span>
+              </span>
+            </div>
+            <p class="agent__msg">Let's settle it — all public APIs use <em>opaque cursor pagination</em>. No offset/limit.</p>
+          </article>
+
+          <div class="axis" aria-hidden="true">
+            <span class="axis__line"></span>
+            <span class="axis__pulse"></span>
+            <span class="axis__core">
+              <span class="axis__label">Osmos</span>
+              <span class="axis__rev" id="moment-rev">r41</span>
+            </span>
+          </div>
+
+          <article class="agent" data-role="dest" data-active="false" aria-label="Matthew, using Claude">
+            <div class="agent__head">
+              <span class="agent__avatar" aria-hidden="true">MA</span>
+              <span>
+                <span class="agent__who">Matthew</span><br>
+                <span class="agent__tool">Claude</span>
+              </span>
+            </div>
+            <p class="agent__msg agent__msg--empty" id="moment-dest">Asks: "Build the messages endpoint."</p>
+            <span class="chip" id="moment-chip" data-visible="false">
+              <span class="chip__dot" aria-hidden="true"></span>
+              <span id="moment-chip-text">Used from Osmos</span>
+            </span>
+          </article>
+
+        </div>
+
+        <div class="moment__controls">
+          <button class="btn btn--secondary btn--sm" id="moment-replay" type="button" data-osmos-event="hero_demo_replay">Replay</button>
+          <div class="toggle" role="group" aria-label="Compare with and without Osmos">
+            <button class="toggle__btn" type="button" id="moment-off" aria-pressed="false">Without Osmos</button>
+            <button class="toggle__btn" type="button" id="moment-on" aria-pressed="true">With Osmos</button>
+          </div>
+          <p class="moment__status" id="moment-status" role="status" aria-live="polite">Ready</p>
+        </div>
+      </div>
+
+      <p class="t-small" style="margin-top:var(--s-4);text-align:center">Illustration of a real handoff. Nothing here is a recording — run it yourself in about two minutes.</p>
+    </div>
+  </section>
+
+  <!-- ================= Provider strip ================= -->
+  <section class="section--tight" aria-labelledby="providers-h">
+    <div class="container">
+      <h2 class="visually-hidden" id="providers-h">Supported clients</h2>
+      <ul class="providers">
+        <li class="provider" data-state="available"><span class="provider__dot" aria-hidden="true"></span>Claude <span class="provider__state">Available</span></li>
+        <li class="provider" data-state="available"><span class="provider__dot" aria-hidden="true"></span>ChatGPT <span class="provider__state">Available</span></li>
+        <li class="provider" data-state="available"><span class="provider__dot" aria-hidden="true"></span>Any MCP client <span class="provider__state">Available</span></li>
+        <li class="provider" data-state="available"><span class="provider__dot" aria-hidden="true"></span>REST API <span class="provider__state">Available</span></li>
+        <li class="provider" data-state="planned"><span class="provider__dot" aria-hidden="true"></span>Claude Code <span class="provider__state">Planned</span></li>
+        <li class="provider" data-state="planned"><span class="provider__dot" aria-hidden="true"></span>Cursor <span class="provider__state">Planned</span></li>
+        <li class="provider" data-state="planned"><span class="provider__dot" aria-hidden="true"></span>Codex <span class="provider__state">Planned</span></li>
+        <li class="provider" data-state="planned"><span class="provider__dot" aria-hidden="true"></span>Gemini <span class="provider__state">Planned</span></li>
+      </ul>
+      <p class="t-small" style="margin-top:var(--s-4);text-align:center">"Planned" means exactly that. We only mark something available once it is documented and tested.</p>
+    </div>
+  </section>
+
+  <!-- ================= Problem ================= -->
+  <section class="section" aria-labelledby="problem-h">
+    <div class="container">
+      <div class="section__head">
+        <span class="eyebrow">The problem</span>
+        <h2 class="t-h2" id="problem-h">Your team collaborates. Your agents don't.</h2>
+        <p class="t-lead" style="margin-top:var(--s-4)">You decide something once, with one agent. Every other agent on the project keeps working from a version of the world where you never decided it.</p>
+      </div>
+
+      <div class="compare">
+        <div class="compare__col">
+          <p class="compare__label">Today</p>
+          <div class="stack-list">
+            <div class="stack-item">ChatGPT <span class="stack-item__tag">isolated</span></div>
+            <div class="stack-item">Claude <span class="stack-item__tag">isolated</span></div>
+            <div class="stack-item">Cursor <span class="stack-item__tag">isolated</span></div>
+          </div>
+          <p class="t-body" style="margin-top:var(--s-4)">The gap is closed by hand: someone remembers, re-explains, pastes context between chats, or an agent re-derives the decision from the code and gets it slightly wrong.</p>
+        </div>
+        <div class="compare__col compare__col--with">
+          <p class="compare__label">With Osmos</p>
+          <div class="stack-list">
+            <div class="stack-item stack-item--linked">ChatGPT <span class="stack-item__tag">shared project</span></div>
+            <div class="stack-item stack-item--linked">Claude <span class="stack-item__tag">shared project</span></div>
+            <div class="stack-item stack-item--linked">Cursor <span class="stack-item__tag">shared project</span></div>
+          </div>
+          <p class="t-body" style="margin-top:var(--s-4)">Durable decisions, constraints, and findings live with the project. Each agent pulls what is relevant to the task in front of it, and publishes what it learned.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= What just happened ================= -->
+  <section class="section" aria-labelledby="explain-h">
+    <div class="container">
+      <div class="section__head">
+        <span class="eyebrow">The Osmos Moment</span>
+        <h2 class="t-h2" id="explain-h">Tell one agent once. The project remembers.</h2>
+        <p class="t-lead" style="margin-top:var(--s-4)">A cross-agent context handoff is the thing Osmos exists to produce. Here is what happened in the demo above.</p>
+      </div>
+
+      <div class="grid grid--3">
+        <div class="card">
+          <span class="card__num" aria-hidden="true">1</span>
+          <h3 class="t-h3 card__title">Captured</h3>
+          <p class="t-body">Sam's agent recognised a durable decision and published it with <code class="t-mono">sac_remember_shared</code>. Sam did nothing extra.</p>
+        </div>
+        <div class="card">
+          <span class="card__num" aria-hidden="true">2</span>
+          <h3 class="t-h3 card__title">Recorded</h3>
+          <p class="t-body">The project revision incremented. The decision now carries its source, its author, its type, and its time.</p>
+        </div>
+        <div class="card">
+          <span class="card__num" aria-hidden="true">3</span>
+          <h3 class="t-h3 card__title">Retrieved</h3>
+          <p class="t-body">Matthew's agent called <code class="t-mono">sac_sync_context</code> before answering and received the decision — different person, different model, different account.</p>
+        </div>
+      </div>
+
+      <div class="video-slot" style="margin-top:var(--s-6)">
+        <div>
+          <p class="t-body" style="color:var(--osmos-text)">Product film — 60 seconds</p>
+          <p class="t-small">Placeholder. The recorded walkthrough goes here.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= Your day ================= -->
+  <section class="section" aria-labelledby="day-h">
+    <div class="container">
+      <div class="section__head">
+        <span class="eyebrow">Day to day</span>
+        <h2 class="t-h2" id="day-h">You won't think about it after the first day.</h2>
+        <p class="t-lead" style="margin-top:var(--s-4)">Osmos runs underneath the tools you already use. There is no new app to check and no workspace to migrate into.</p>
+      </div>
+
+      <div class="timeline measure">
+        <div class="tl">
+          <span class="tl__time">9:14</span>
+          <div class="tl__body">
+            <p class="tl__title">You settle an API question in ChatGPT</p>
+            <p class="t-body">Ordinary working conversation. Your agent publishes the decision on its own — you don't stop to write it down anywhere.</p>
+          </div>
+        </div>
+        <div class="tl tl--key">
+          <span class="tl__time">14:30</span>
+          <div class="tl__body">
+            <p class="tl__title">Your teammate asks Claude for the endpoint</p>
+            <p class="t-body">It already builds cursor pagination. Nobody messaged anybody. This is the moment the product is for.</p>
+          </div>
+        </div>
+        <div class="tl">
+          <span class="tl__time">Thu</span>
+          <div class="tl__body">
+            <p class="tl__title">You reverse the decision</p>
+            <p class="t-body">The new decision supersedes the old one and the revision moves. Agents stop citing the version you abandoned.</p>
+          </div>
+        </div>
+        <div class="tl">
+          <span class="tl__time">Next month</span>
+          <div class="tl__body">
+            <p class="tl__title">Someone new joins</p>
+            <p class="t-body">Their agent starts with the project's accumulated understanding instead of an empty context window.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= Pillars ================= -->
+  <section class="section" aria-labelledby="pillars-h">
+    <div class="container">
+      <div class="section__head">
+        <h2 class="t-h2" id="pillars-h">What the project keeps</h2>
+      </div>
+      <div class="grid grid--3">
+        <div class="card">
+          <h3 class="t-h3 card__title">Shared project context</h3>
+          <p class="t-body">Decisions, constraints, findings, and results follow the project instead of being trapped in one chat with one model.</p>
+        </div>
+        <div class="card">
+          <h3 class="t-h3 card__title">Private when it should be</h3>
+          <p class="t-body">Private and shared scopes are separate. Permission filtering happens in SQL before context is compiled, so an agent never receives memory its caller isn't authorised for.</p>
+        </div>
+        <div class="card">
+          <h3 class="t-h3 card__title">Know where it came from</h3>
+          <p class="t-body">Every durable item carries provenance and version history. You can ask what the project believes, why, who added it, and what changed.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= How it works ================= -->
+  <section class="section" id="how" aria-labelledby="how-h">
+    <div class="container">
+      <div class="section__head">
+        <span class="eyebrow">How it works</span>
+        <h2 class="t-h2" id="how-h">Three steps, then it's background.</h2>
+      </div>
+      <div class="grid grid--3">
+        <div class="card">
+          <span class="card__num" aria-hidden="true">1</span>
+          <h3 class="t-h3 card__title">Connect</h3>
+          <p class="t-body">Add Osmos to Claude or ChatGPT as a custom connector, or to any MCP client. One URL and an OAuth sign-in.</p>
+        </div>
+        <div class="card">
+          <span class="card__num" aria-hidden="true">2</span>
+          <h3 class="t-h3 card__title">Work normally</h3>
+          <p class="t-body">Keep using the tools you already use. No new workspace, no migration, no changing how you prompt.</p>
+        </div>
+        <div class="card">
+          <span class="card__num" aria-hidden="true">3</span>
+          <h3 class="t-h3 card__title">Knowledge moves</h3>
+          <p class="t-body">Agents sync relevant context before they work and publish durable knowledge after. The project's understanding compounds.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= Developers ================= -->
+  <section class="section" id="developers" aria-labelledby="dev-h">
+    <div class="container">
+      <div class="section__head">
+        <span class="eyebrow">For developers</span>
+        <h2 class="t-h2" id="dev-h">Built to sit between your tools, not replace them.</h2>
+        <p class="t-lead" style="margin-top:var(--s-4)">One service exposing MCP and a REST mirror over the same backend. Provider-neutral by construction — the model is a client, never the database.</p>
+      </div>
+
+      <div class="grid grid--2">
+        <div>
+          <div class="code">
+            <div class="code__head">
+              <span class="code__name">agent turn</span>
+              <button class="copy" type="button" data-copy="sac_sync_context(task=&quot;implement message pagination&quot;)">Copy</button>
+            </div>
+<pre><code><span class="k">sac_sync_context</span>(task=<span class="s">"implement message pagination"</span>)
+
+<span class="o">-&gt; decision: public APIs use opaque cursor pagination</span>
+<span class="o">-&gt; source:   Sam / ChatGPT</span>
+<span class="o">-&gt; revision: r42</span></code></pre>
+          </div>
+          <p class="t-small" style="margin-top:var(--s-4)">Eight MCP tools, deliberately few: sync, remember shared, remember private, recent changes, get memory, get source, project info, status.</p>
+        </div>
+        <div class="deflist">
+          <div class="deflist__row">
+            <span class="deflist__term">Identity</span>
+            <span class="t-body">In-service OAuth 2.1 — authorization code, PKCE, dynamic client registration, and CIMD. Per-client connections you can revoke individually.</span>
+          </div>
+          <div class="deflist__row">
+            <span class="deflist__term">Retrieval</span>
+            <span class="t-body">Deterministic ranking over lexical match, type, importance, and recency. No embeddings yet — the behaviour is inspectable and repeatable.</span>
+          </div>
+          <div class="deflist__row">
+            <span class="deflist__term">Storage</span>
+            <span class="t-body">PostgreSQL in deployment, SQLite locally. Monotonic per-project revisions, memory versions, and supersession.</span>
+          </div>
+          <div class="deflist__row">
+            <span class="deflist__term">Run it</span>
+            <span class="t-body">One Python process. Deploy it to your own infrastructure, or run it on your machine to try it.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= Trust ================= -->
+  <section class="section" aria-labelledby="trust-h">
+    <div class="container">
+      <div class="section__head">
+        <span class="eyebrow">Privacy and control</span>
+        <h2 class="t-h2" id="trust-h">Shared deliberately. Traceable by default.</h2>
+        <p class="t-lead" style="margin-top:var(--s-4)">Connecting an agent does not mean handing over everything. The server decides what each identity may read and write — the model is never the authorisation layer.</p>
+      </div>
+      <div class="grid grid--2">
+        <div class="card">
+          <h3 class="t-h3 card__title">Scopes</h3>
+          <p class="t-body">Private and shared. Private memory is filtered out in the query, not trimmed from the response afterwards.</p>
+        </div>
+        <div class="card">
+          <h3 class="t-h3 card__title">Revocation</h3>
+          <p class="t-body">Every connected client is listed and individually revocable. The next call from a revoked client fails.</p>
+        </div>
+        <div class="card">
+          <h3 class="t-h3 card__title">Provenance</h3>
+          <p class="t-body">Who, which agent, from what source, and when — attached to the memory, not reconstructed later.</p>
+        </div>
+        <div class="card">
+          <h3 class="t-h3 card__title">Inspection</h3>
+          <p class="t-body">A human control plane to read what the project believes, see the audit feed, and retract anything that shouldn't be there.</p>
+        </div>
+      </div>
+      <p style="margin-top:var(--s-6)"><a href="security.html" data-osmos-event="security_view" style="display:inline-flex;align-items:center;min-height:24px">Read what Osmos enforces today →</a></p>
+    </div>
+  </section>
+
+  <!--
+    Social proof section intentionally omitted.
+    WEBSITE_PLAN.md section 15 forbids invented metrics, logos, and testimonials, and there is no
+    genuine traction data yet. Unlock this section with: founding-team count, real context-handoff
+    counts from the audit log, or a quoted alpha user who has given permission.
+  -->
+
+  <!-- ================= FAQ ================= -->
+  <section class="section" aria-labelledby="faq-h">
+    <div class="container">
+      <div class="section__head">
+        <h2 class="t-h2" id="faq-h">Questions</h2>
+      </div>
+      <div class="faq">
+        <details class="faq__item">
+          <summary>Is this another chat app?</summary>
+          <div class="faq__answer"><p class="t-body">No. There is no Osmos chat interface and nothing to migrate into. It runs underneath the assistants you already use and gives them a shared project memory.</p></div>
+        </details>
+        <details class="faq__item">
+          <summary>Does Osmos read my whole ChatGPT or Claude history?</summary>
+          <div class="faq__answer"><p class="t-body">No. It receives what an agent explicitly sends it — a task description when syncing, and durable knowledge when publishing. Transcripts are not uploaded. The design goal is to share decisions and findings, not conversations.</p></div>
+        </details>
+        <details class="faq__item">
+          <summary>What do my teammates actually see?</summary>
+          <div class="faq__answer"><p class="t-body">Only what is written to the shared scope. Private memories are visible to you alone, enforced by the server before any context is compiled — not by asking the model to keep a secret.</p></div>
+        </details>
+        <details class="faq__item">
+          <summary>Which tools work today?</summary>
+          <div class="faq__answer"><p class="t-body">Claude and ChatGPT as custom connectors, any MCP client, and a REST API. Other clients are listed as planned above, and we won't call them available until they're documented and tested.</p></div>
+        </details>
+        <details class="faq__item">
+          <summary>Where does the data live?</summary>
+          <div class="faq__answer"><p class="t-body">Wherever you run it. Osmos is a single Python service backed by PostgreSQL — you deploy it to your own infrastructure. There is no hosted service today.</p></div>
+        </details>
+        <details class="faq__item">
+          <summary>What happens when a decision changes?</summary>
+          <div class="faq__answer"><p class="t-body">New knowledge can supersede old knowledge explicitly. The old version stays in history with its provenance, and the project revision moves so agents know something changed.</p></div>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= Final CTA ================= -->
+  <section class="section final" aria-labelledby="final-h">
+    <div class="container">
+      <div class="final__flow" aria-hidden="true"></div>
+      <h2 class="t-h1 final__title" id="final-h">Your agents shouldn't have to start over.</h2>
+      <p class="t-lead final__lead">Give your team one evolving project understanding across the AI tools they already use.</p>
+      <div class="btn-row final__ctas">
+        <a class="btn btn--primary" href="get-started.html" data-osmos-event="setup_started">Get Osmos</a>
+        <a class="btn btn--secondary" href="https://github.com/SamEthanMathew/Shared-Agent-Context" data-osmos-event="github_click">View source</a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <div class="container">
+    <div class="footer__grid">
+      <div>
+        <a class="nav__brand" href="index.html" aria-label="Osmos home">
+          <img class="nav__mark" src="assets/osmos-mark-dark.svg" alt="" width="28" height="28">
+          <span class="nav__word">OSMOS</span>
+        </a>
+        <p class="t-small" style="margin-top:var(--s-4);max-width:34ch">Shared project context for AI agents. Models are replaceable; project knowledge should persist.</p>
+      </div>
+      <div>
+        <p class="footer__title">Product</p>
+        <ul class="footer__list">
+          <li><a href="#how">How it works</a></li>
+          <li><a href="#developers">Developers</a></li>
+          <li><a href="security.html">Security</a></li>
+          <li><a href="get-started.html">Get Osmos</a></li>
+        </ul>
+      </div>
+      <div>
+        <p class="footer__title">Project</p>
+        <ul class="footer__list">
+          <li><a href="https://github.com/SamEthanMathew/Shared-Agent-Context">GitHub</a></li>
+          <li><a href="https://github.com/SamEthanMathew/Shared-Agent-Context/blob/main/docs/SETUP.md">Documentation</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer__bottom">
+      <span>© 2026 Osmos</span>
+      <span>Different people. Different agents. Same project understanding.</span>
+    </div>
+  </div>
+</footer>
+
+<script src="theme.js"></script>
+<script src="osmos-moment.js"></script>
+</body>
+</html>
