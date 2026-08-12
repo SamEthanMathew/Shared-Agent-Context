@@ -73,3 +73,18 @@ def seed(tmp_path) -> Seed:
         alice_conn=alice_conn,
         bob_conn=bob_conn,
     )
+
+
+@pytest.fixture
+def wired(seed, monkeypatch):
+    """Point the process-wide runtime store at the seeded test store and force
+    dev-mode identity, so the REST and MCP surfaces exercise real seeded data.
+    """
+    import app.runtime as runtime
+
+    monkeypatch.setenv("SAC_AUTH_MODE", "dev")
+    monkeypatch.delenv("SAC_DEFAULT_PROJECT_ID", raising=False)
+    previous = runtime.store
+    runtime.set_store(seed.store)
+    yield seed
+    runtime.set_store(previous)

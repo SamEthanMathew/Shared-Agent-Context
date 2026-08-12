@@ -191,6 +191,15 @@ class ProjectStore:
             ).first()
         return row.role if row else None
 
+    def list_user_project_ids(self, user_id: str) -> list[str]:
+        with self.engine.begin() as conn:
+            rows = conn.execute(
+                select(memberships.c.project_id).where(
+                    memberships.c.user_id == user_id
+                )
+            ).all()
+        return [r.project_id for r in rows]
+
     def list_members(self, project_id: str) -> list[dict[str, Any]]:
         with self.engine.begin() as conn:
             rows = conn.execute(
