@@ -1,268 +1,285 @@
 # Shared Agent Context
 
-**Shared Agent Context is a model-agnostic collaboration layer for AI agents.**
+**Shared Agent Context (SAC) is a model-agnostic shared memory and context layer for AI agents.**
 
-It gives teams a persistent, shared project brain that multiple people and multiple AI systems can read from and write to, even when those users are working in different accounts, different chats, different IDEs, or with different model providers.
+It gives multiple people and multiple AI systems a persistent project brain that survives across accounts, chats, IDEs, and model providers.
 
-The core idea is simple:
+> **Models are replaceable. Project knowledge should persist.**
 
-> Models are replaceable. Project knowledge should persist.
+## Runnable V0
 
-Today, AI collaboration is fragmented. Sam can work with ChatGPT on the macOS side of a product while Matthew uses Claude or Codex on the Windows side, but their agents do not automatically share what they know. Each chat, account, model, and tool develops its own partial view of the project.
+The repository now contains a runnable two-account proof of concept.
 
-Shared Agent Context sits between those tools as a neutral knowledge layer.
+The deliberately narrow V0 tests one hypothesis:
+
+> **Can one ChatGPT-side account and one Claude-side account work independently while continuously benefiting from project knowledge produced by the other?**
+
+V0 removes most product complexity:
+
+- one shared SAC project
+- one growing shared memory pool
+- no dashboard
+- no private SAC memories
+- no OAuth/ACL layer yet
+- no vector database requirement
+- no autonomous orchestration
+- one Python service
+- PostgreSQL in deployment, SQLite locally
+- MCP v2 + REST/OpenAPI over the same backend
+
+The runtime model is:
+
+```text
+Person A / ChatGPT                        Person B / Claude
+┌──────────────────────┐                 ┌──────────────────────┐
+│ Native chat context  │                 │ Native chat context  │
+│ provider-owned       │                 │ provider-owned       │
+└──────────┬───────────┘                 └──────────┬───────────┘
+           │                                        │
+           │ sync / publish              sync / publish
+           └──────────────────┐    ┌────────────────┘
+                              ▼    ▼
+                        ┌──────────────┐
+                        │  SHARED SAC  │
+                        │              │
+                        │ revision log │
+                        │ decisions    │
+                        │ findings     │
+                        │ constraints  │
+                        │ results      │
+                        └──────┬───────┘
+                               │
+                       context compiler
+                               │
+                 task/model-sized working view
+```
+
+The shared pool can keep growing while each model receives only a bounded, task-relevant view.
+
+### Always-on sync loop
+
+While SAC is enabled, the intended agent behavior is:
+
+```text
+user turn
+   ↓
+sac_sync
+   ↓
+native provider context + current SAC context
+   ↓
+model researches / builds / reasons
+   ↓
+sac_publish durable project knowledge
+   ↓
+answer user
+   ↓
+other account receives the update on its next sync
+```
+
+`sac_sync` also accepts a concise `local_context_delta` from the previous local turn, so a long-running provider-native conversation can continuously contribute knowledge to SAC without copying its entire transcript.
+
+### V0 endpoints
+
+One service exposes both integration surfaces:
+
+```text
+/mcp                 MCP v2 Streamable HTTP
+/api/sync            REST equivalent of sac_sync
+/api/publish         REST equivalent of sac_publish
+/api/memory/{id}     rehydrate one memory
+/api/status          shared pool state
+/openapi.json        ChatGPT Action schema
+/health              liveness
+```
+
+Current MCP tools:
+
+```text
+sac_sync
+sac_publish
+sac_get_memory
+sac_status
+```
+
+### Current test status
+
+GitHub Actions validates:
+
+1. database-backed shared-memory writes and revision tracking;
+2. Person A → Person B context handoff;
+3. the official MCP Python SDK v2 client calling SAC tools in-process;
+4. Uvicorn serving the application over HTTP;
+5. a real MCP v2 client connecting to `/mcp` over Streamable HTTP;
+6. Person A publishing a memory over MCP and Person B receiving it through `sac_sync`.
+
+See [`docs/V0_MCP_PROTOTYPE.md`](docs/V0_MCP_PROTOTYPE.md) for deployment and two-account setup.
 
 ## The Problem
 
-AI agents increasingly perform real project work, but their context is siloed.
+AI collaboration is fragmented.
 
-A typical team might use:
+A team might use ChatGPT for research, Claude for reasoning, Codex or Claude Code for implementation, GitHub for source control, and Notion or Docs for documentation. Each system develops a different partial view of the project.
 
-- ChatGPT for research and planning
-- Claude for long-form reasoning
-- Codex or Cursor for implementation
-- GitHub for source control
-- Notion or Google Docs for documentation
-- Linear or Jira for task management
+This creates:
 
-Each system sees a different slice of the work. Knowledge is copied manually, buried in chat history, reconstructed from commits, or lost entirely.
+1. **Context fragmentation** — each agent has incomplete project knowledge.
+2. **Duplicated work** — agents repeat research and decisions already completed elsewhere.
+3. **Project drift** — collaborators act on stale assumptions.
+4. **Vendor lock-in** — useful project knowledge becomes trapped inside one product/account.
+5. **Weak agent handoff** — one agent's work does not naturally improve another agent's next task.
 
-That creates several problems:
+## The Long-Term Model
 
-1. **Context fragmentation** - each agent has an incomplete understanding of the project.
-2. **Duplicated work** - agents repeat research, decisions, or implementation work already done elsewhere.
-3. **Project drift** - different collaborators operate from stale assumptions.
-4. **Vendor lock-in** - useful memory is trapped inside one AI product or account.
-5. **Poor agent-to-agent collaboration** - agents can execute tasks, but they cannot reliably maintain a common understanding of the project.
+SAC separates four concepts that are often collapsed together:
 
-## The Vision
+```text
+conversation working state
+        ≠
+personal/provider memory
+        ≠
+shared durable project memory
+        ≠
+model inference context window
+```
 
-Shared Agent Context becomes the collaboration infrastructure between humans and AI agents.
+SAC owns the durable **project-memory** layer and compiles relevant project state into each model's finite inference context.
 
-Instead of sharing entire conversations, agents exchange structured project knowledge.
-
-Each project gets a persistent shared context containing things such as:
-
-- project goals
-- architecture
-- product requirements
-- decisions
-- assumptions
-- current tasks
-- completed work
-- blockers
-- experiments
-- artifacts
-- important files
-- people and responsibilities
-- unresolved questions
-- recent changes
-
-Every connected agent can retrieve the context relevant to its current task and contribute new knowledge back into the shared project brain.
-
-## Example
-
-Sam and Matthew are building the same application.
-
-Sam is working on the macOS client using ChatGPT and Codex.
-
-Matthew is working on the Windows client using Claude and Cursor.
-
-Sam's agent discovers that authentication will use device-bound passkeys and updates Shared Agent Context.
-
-Matthew later asks Claude to implement Windows authentication. Claude retrieves the project's current authentication decision automatically and builds against the same architecture.
-
-No one had to copy a chat, update a `CLAUDE.md` file, or message the other person.
-
-The knowledge followed the project instead of the model.
-
-## Product Principles
-
-### 1. Model agnostic
-
-Shared Agent Context should work across ChatGPT, Claude, Gemini, Codex, Cursor, local models, and future AI systems.
-
-### 2. User owned
-
-Project memory belongs to the project and its collaborators, not to the model provider that created it.
-
-### 3. Knowledge, not chat logs
-
-The system should extract and store durable project knowledge rather than blindly copying entire conversations.
-
-### 4. Context on demand
-
-Agents should receive the smallest useful subset of project knowledge for the task they are performing.
-
-### 5. Provenance by default
-
-Every piece of shared knowledge should be traceable to where it came from: a user, agent, conversation, commit, document, tool action, or external source.
-
-### 6. Permission aware
-
-Not every collaborator or agent should see or modify every piece of project context.
-
-### 7. Continuously updated
-
-The shared brain should evolve as work happens instead of depending solely on commits or manual documentation updates.
-
-## What This Is Not
-
-Shared Agent Context is not intended to be:
-
-- another chat application
-- a replacement for GitHub
-- a replacement for Notion or Google Docs
-- a single-model memory feature
-- a giant prompt copied into every agent
-- a simple vector database wrapper
-
-Those systems remain useful. Shared Agent Context connects the knowledge produced across them.
-
-## Initial Product Surface
-
-The first useful version should provide:
-
-1. **Projects** - shared context spaces owned by one or more users.
-2. **Members and permissions** - invite collaborators and control access.
-3. **Memory objects** - structured facts, decisions, tasks, artifacts, summaries, and events.
-4. **Write API** - agents can propose or record project updates.
-5. **Retrieval API** - agents can request context relevant to a task.
-6. **Provenance** - every memory object records its source.
-7. **Version history** - project knowledge can evolve without silently overwriting history.
-8. **Conflict handling** - contradictory facts or decisions can be surfaced instead of merged incorrectly.
-9. **Agent integrations** - begin with MCP/API access and a small number of high-value clients.
-10. **Human project view** - a dashboard where collaborators can inspect and correct what the shared brain believes.
-
-## Architecture Direction
-
-At a high level:
+The long-term architecture is roughly:
 
 ```text
 ChatGPT ─┐
 Claude  ─┤
 Codex   ─┤
-Cursor  ─┤      ┌───────────────────────────┐
-Gemini  ─┼─────▶│   Shared Agent Context    │
-Local AI ┤      │                           │
-Other    ─┘      │ Identity + Permissions    │
-                 │ Memory Store              │
-GitHub   ───────▶│ Retrieval                 │
-Notion   ───────▶│ Knowledge Extraction      │
-Docs     ───────▶│ Provenance + Versioning   │
-Linear   ───────▶│ Events / Sync             │
-                 └───────────────────────────┘
-                              │
-                              ▼
-                  Relevant context returned
-                  to whichever agent needs it
+Claude  ─┤
+Code     │
+Gemini  ─┤          ┌──────────────────────────────┐
+Local AI ┼─────────▶│     Shared Agent Context     │
+Other    ─┘          │                              │
+                     │ Evidence / event history     │
+GitHub   ───────────▶│ Governed memory store        │
+Notion   ───────────▶│ Revisions + provenance       │
+Docs     ───────────▶│ Retrieval indexes            │
+Other    ───────────▶│ Context compiler             │
+                     │ Compaction / semantic paging │
+                     └──────────────┬───────────────┘
+                                    │
+                         task/model-specific context
 ```
 
-A deeper architecture proposal lives in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+## Key Architectural Principles
 
-## Target Market
+### Project memory lives outside the models
 
-The initial wedge is teams already doing significant work with multiple AI agents.
+A model's native context window, tokenizer, hidden state, KV cache, or provider conversation object is never canonical SAC state.
 
-### Primary early users
+### Same knowledge does not mean same prompt
 
-- AI-native startup teams
-- software engineering teams using multiple coding agents
-- research labs
-- technical cofounders
-- open-source maintainers
-- small teams coordinating autonomous or semi-autonomous agents
+Different models can have different supported and effective context sizes. SAC can compile 8K tokens for one client and 40K for another while both views come from the same project truth.
 
-### Later markets
+### Context is compiled, not accumulated
 
-- product and design teams
-- consulting and professional services
-- enterprise knowledge work
-- multi-agent automation platforms
-- organizations deploying internal AI copilots
+SAC should retrieve, rank, resolve, compact, and pack the smallest sufficient working set for the current task rather than blindly filling the largest context window available.
 
-## Why Now
+### Compaction is projection, not deletion
 
-The AI ecosystem is moving from one assistant per user toward many agents operating across many tools.
+The project history can continue growing externally while active model context is compacted. Raw evidence remains addressable so a compact view can later be re-hydrated for a larger model or a task that needs more detail.
 
-As execution becomes cheaper, coordination becomes more important.
+### Provenance and time matter
 
-The bottleneck shifts from "can an AI perform this task?" to:
+Eventually a project brain must know not only *what* it believes, but who said it, when it was valid, what superseded it, and where the evidence came from.
 
-> "Does this AI know what the rest of the team and the rest of the agents already know?"
+### Permissions happen before inference
 
-Shared Agent Context is designed around that coordination problem.
+The production architecture must filter data before it reaches a model. The current two-account V0 intentionally postpones this layer to test the core shared-context hypothesis first.
 
-## Business Model
+## V0 Storage and Retrieval
 
-Potential business model:
+The current proof uses three tables:
 
-- **Free / developer tier** - limited projects, members, and context usage
-- **Team SaaS** - per-seat or usage-based shared projects
-- **API platform** - memory/retrieval infrastructure priced by storage, retrieval, and events
-- **Enterprise** - SSO, audit logs, advanced permissions, private deployment, retention controls, compliance, and administration
+```text
+project_counters
+memories
+sessions
+```
 
-The long-term opportunity is to become infrastructure rather than only an end-user application.
+Every accepted shared memory increments a project revision:
 
-## MVP
+```text
+r41  Person A finding
+r42  Person A decision
+r43  Person B result
+r44  Person A constraint
+```
 
-The MVP should prove one thing:
+Each session tracks the latest revision it has seen. `sac_sync` therefore combines:
 
-> Two people using different AI clients can work on the same project and reliably benefit from knowledge produced by each other's agents.
+```text
+what changed since this session last synced
++
+what existing shared memories are relevant to the current task
+```
 
-A strong first demo:
+V0 ranking intentionally stays simple:
 
-1. User A creates a shared project.
-2. User B joins it.
-3. User A works with one AI client and makes a project decision.
-4. The client writes that decision into Shared Agent Context.
-5. User B works from a different AI client/account.
-6. That agent retrieves the decision without User B manually copying anything.
-7. User B's agent contributes another update.
-8. User A's agent immediately has access to it.
-9. Both users can inspect exactly what was stored and where it came from.
+```text
+lexical relevance
++ memory-type weight
++ importance
++ recency
+```
 
-See [`docs/MVP.md`](docs/MVP.md) for the proposed implementation scope.
+This lets us test the product hypothesis before adding embeddings, rerankers, graphs, hierarchical summaries, provider tokenizers, or learned memory extraction.
 
-## Long-Term Direction
+## Deployment Shape
 
-If successful, Shared Agent Context can evolve into a broader coordination layer for AI work:
+The included `render.yaml` defines a small Python web service and PostgreSQL database. The application can also run locally with SQLite.
 
-- agent presence and activity
-- task ownership
-- shared plans
-- subscriptions to project changes
-- semantic event streams
-- automatic handoffs between agents
-- context branches and environments
-- organizational knowledge graphs
-- policy-aware agent permissions
-- agent identities
-- cross-application workflows
-- standardized context portability
+```text
+app/main.py      FastAPI + MCPServer v2
+app/store.py     persistence + revision/session state
+app/context.py   V0 context compiler
+```
 
-The ambitious version is effectively **collaboration infrastructure for AI agents**.
+CI uses the official stable MCP Python SDK v2 and tests both in-process and Streamable HTTP MCP calls.
 
-## Repository Status
+## MVP Success Criterion
 
-This repository currently contains the initial product definition, architecture direction, business plan, research foundation, context-window architecture, long-context research, dynamic compaction/semantic virtual-memory design, implementation guidance, and MVP roadmap.
+The first proof succeeds when:
 
-The project is at the concept / pre-MVP stage.
+1. Person A works in an OpenAI-side chat.
+2. That discussion produces reusable project knowledge.
+3. SAC records the durable delta without Person A manually copying it to Person B.
+4. Person B independently works in Claude.
+5. Person B's next SAC sync retrieves the relevant Person A knowledge.
+6. Person B produces new reusable knowledge and publishes it.
+7. Person A's next sync receives Person B's contribution.
+8. Removing SAC makes the cross-account workflow noticeably worse.
+
+The core message remains:
+
+> **Different people. Different agents. Same project brain.**
 
 ## Documents
 
-- [`docs/BUSINESS_PLAN.md`](docs/BUSINESS_PLAN.md) - market, positioning, business model, risks, and go-to-market
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) - proposed technical architecture and memory model
-- [`docs/V0_PRODUCT_ARCHITECTURE.md`](docs/V0_PRODUCT_ARCHITECTURE.md) - concrete first-product architecture for one OpenAI-side user and one Anthropic-side user, including private/shared context pools, per-turn sync, revisions, integration adapters, APIs, schema, build order, acceptance tests, and unresolved research
-- [`docs/RESEARCH_CONTEXT_WINDOWS_AND_MEMORY.md`](docs/RESEARCH_CONTEXT_WINDOWS_AND_MEMORY.md) - research on model context windows, long-context behavior, memory systems, and cross-model interoperability
-- [`docs/RESEARCH_EXPANDING_CONTEXT_WINDOWS_2023_2026.md`](docs/RESEARCH_EXPANDING_CONTEXT_WINDOWS_2023_2026.md) - deep research on how long-context models scale, including positional extension, attention, KV-cache systems, distributed serving, effective-context limits, external memory, and implications for SAC
-- [`docs/HIGH_QUALITY_CONTEXT_WINDOW_ARCHITECTURE.md`](docs/HIGH_QUALITY_CONTEXT_WINDOW_ARCHITECTURE.md) - detailed architecture for constructing high-quality, task-specific model context
-- [`docs/CONTEXT_COMPILER.md`](docs/CONTEXT_COMPILER.md) - model-neutral context compilation boundary and provider-adapter design
-- [`docs/LONG_CONTEXT_IMPLEMENTATION_GUIDE.md`](docs/LONG_CONTEXT_IMPLEMENTATION_GUIDE.md) - engineering blueprint for model capability profiles, adaptive budgets, hybrid retrieval, semantic paging, caching, traces, and effective-context evaluation
-- [`docs/DYNAMIC_MODEL_AWARE_CONTEXT_COMPACTION.md`](docs/DYNAMIC_MODEL_AWARE_CONTEXT_COMPACTION.md) - architecture for effectively unbounded logical project context, multi-resolution semantic memory, automatic/model-aware compaction, `/compact`, `/expand`, snapshots, semantic paging, re-hydration, user controls, failure modes, and evaluation
-- [`docs/MVP.md`](docs/MVP.md) - first product scope and build roadmap
-- [`docs/PRINCIPLES.md`](docs/PRINCIPLES.md) - product principles and design constraints
+### Build / product
+
+- [`docs/V0_MCP_PROTOTYPE.md`](docs/V0_MCP_PROTOTYPE.md) — **runnable V0**, deployment, ChatGPT/Claude setup, sync loop, acceptance test, and current limitations
+- [`docs/V0_PRODUCT_ARCHITECTURE.md`](docs/V0_PRODUCT_ARCHITECTURE.md) — broader first-product architecture beyond the stripped-down proof
+- [`docs/MVP.md`](docs/MVP.md) — MVP roadmap and cross-client demo definition
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — general SAC architecture and memory model
+- [`docs/PRINCIPLES.md`](docs/PRINCIPLES.md) — product/architecture principles
+- [`docs/BUSINESS_PLAN.md`](docs/BUSINESS_PLAN.md) — positioning, market, business model, risks, and GTM
+
+### Context / memory research
+
+- [`docs/RESEARCH_CONTEXT_WINDOWS_AND_MEMORY.md`](docs/RESEARCH_CONTEXT_WINDOWS_AND_MEMORY.md) — context windows, memory systems, collaborative memory, and cross-model interoperability
+- [`docs/RESEARCH_EXPANDING_CONTEXT_WINDOWS_2023_2026.md`](docs/RESEARCH_EXPANDING_CONTEXT_WINDOWS_2023_2026.md) — long-context scaling, attention, KV-cache systems, serving, benchmarks, and SAC implications
+- [`docs/HIGH_QUALITY_CONTEXT_WINDOW_ARCHITECTURE.md`](docs/HIGH_QUALITY_CONTEXT_WINDOW_ARCHITECTURE.md) — architecture for constructing high-quality task-specific context
+- [`docs/CONTEXT_COMPILER.md`](docs/CONTEXT_COMPILER.md) — provider-neutral context compiler and adapter boundary
+- [`docs/LONG_CONTEXT_IMPLEMENTATION_GUIDE.md`](docs/LONG_CONTEXT_IMPLEMENTATION_GUIDE.md) — model capability profiles, adaptive budgets, retrieval, semantic paging, caching, and evaluation
+- [`docs/DYNAMIC_MODEL_AWARE_CONTEXT_COMPACTION.md`](docs/DYNAMIC_MODEL_AWARE_CONTEXT_COMPACTION.md) — effectively unbounded logical context, `/compact`, `/expand`, re-hydration, semantic paging, and model-aware compaction
+- [`docs/PRIVACY_PERMISSION_ARCHITECTURE.md`](docs/PRIVACY_PERMISSION_ARCHITECTURE.md) — researched privacy/permission architecture for later versions; intentionally not implemented in the stripped-down V0 proof
 
 ## Working Definition
 
-**Shared Agent Context is a user-owned, model-agnostic shared memory and coordination layer that allows multiple humans and AI agents to maintain a consistent understanding of the same project across accounts, applications, and model providers.**
+**Shared Agent Context is a user-owned, model-agnostic shared memory and coordination layer that lets multiple humans and AI agents maintain a consistent understanding of the same project across accounts, applications, and model providers.**
