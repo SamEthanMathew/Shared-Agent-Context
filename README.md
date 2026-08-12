@@ -245,7 +245,7 @@ The ambitious version is effectively **collaboration infrastructure for AI agent
 
 ## Repository Status
 
-This repository currently contains the initial product definition, architecture direction, business plan, research foundation, context-window architecture, long-context research, implementation guidance, and MVP roadmap.
+This repository currently contains the initial product definition, architecture direction, business plan, research foundation, context-window architecture, long-context research, dynamic compaction/semantic virtual-memory design, implementation guidance, and MVP roadmap.
 
 The project is at the concept / pre-MVP stage.
 
@@ -258,6 +258,7 @@ The project is at the concept / pre-MVP stage.
 - [`docs/HIGH_QUALITY_CONTEXT_WINDOW_ARCHITECTURE.md`](docs/HIGH_QUALITY_CONTEXT_WINDOW_ARCHITECTURE.md) - detailed architecture for constructing high-quality, task-specific model context
 - [`docs/CONTEXT_COMPILER.md`](docs/CONTEXT_COMPILER.md) - model-neutral context compilation boundary and provider-adapter design
 - [`docs/LONG_CONTEXT_IMPLEMENTATION_GUIDE.md`](docs/LONG_CONTEXT_IMPLEMENTATION_GUIDE.md) - engineering blueprint for model capability profiles, adaptive budgets, hybrid retrieval, semantic paging, caching, traces, and effective-context evaluation
+- [`docs/DYNAMIC_MODEL_AWARE_CONTEXT_COMPACTION.md`](docs/DYNAMIC_MODEL_AWARE_CONTEXT_COMPACTION.md) - architecture for effectively unbounded logical project context, multi-resolution semantic memory, automatic/model-aware compaction, `/compact`, `/expand`, snapshots, semantic paging, re-hydration, user controls, failure modes, and evaluation
 - [`docs/MVP.md`](docs/MVP.md) - first product scope and build roadmap
 - [`docs/PRINCIPLES.md`](docs/PRINCIPLES.md) - product principles and design constraints
 
