@@ -1,0 +1,12 @@
+<svg width="1200" height="360" viewBox="0 0 1200 360" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="360" rx="40" fill="#0B111B"/>
+  <g transform="translate(70 20) scale(.625)">
+    <path d="M92 256H420" stroke="#F7FAFF" stroke-width="18" stroke-linecap="round"/>
+    <path d="M160 170C136 196 124 224 124 256C124 288 136 316 160 342" stroke="#B02EFF" stroke-width="20" stroke-linecap="round"/>
+    <path d="M202 148C180 182 170 218 170 256C170 294 180 330 202 364" stroke="#8A4DFF" stroke-width="20" stroke-linecap="round"/>
+    <path d="M256 132V380" stroke="#6666FF" stroke-width="20" stroke-linecap="round"/>
+    <path d="M310 148C332 182 342 218 342 256C342 294 332 330 310 364" stroke="#3E8CFF" stroke-width="20" stroke-linecap="round"/>
+    <path d="M352 170C376 196 388 224 388 256C388 288 376 316 352 342" stroke="#30C4F4" stroke-width="20" stroke-linecap="round"/>
+  </g>
+  <text x="435" y="225" fill="#F7FAFF" font-family="Inter,Arial,sans-serif" font-size="122" font-weight="400" letter-spacing="3">OSMOS</text>
+</svg>
