@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from contextlib import asynccontextmanager
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException
 from mcp.server import MCPServer
@@ -100,7 +100,7 @@ def sync_impl(
     task: str,
     local_context_delta: str = "",
     budget_tokens: int = 3000,
-) -> dict:
+) -> dict[str, Any]:
     actor = actor.strip()
     session_id = session_id.strip()
     task = task.strip()
@@ -143,7 +143,7 @@ def publish_impl(
     details: str = "",
     tags: list[str] | None = None,
     importance: float = 0.6,
-) -> dict:
+) -> dict[str, Any]:
     memory = store.add_memory(
         project_id=PROJECT_ID,
         actor=actor.strip(),
@@ -162,14 +162,14 @@ def publish_impl(
     }
 
 
-@mcp.tool()
+@mcp.tool(structured_output=True)
 def sac_sync(
     actor: str,
     session_id: str,
     task: str,
     local_context_delta: str = "",
     budget_tokens: int = 3000,
-) -> dict:
+) -> dict[str, Any]:
     """
     MUST be called automatically at the start of every turn while SAC is enabled.
 
@@ -185,7 +185,7 @@ def sac_sync(
     )
 
 
-@mcp.tool()
+@mcp.tool(structured_output=True)
 def sac_publish(
     actor: str,
     session_id: str,
@@ -194,7 +194,7 @@ def sac_publish(
     details: str = "",
     tags: list[str] | None = None,
     importance: float = 0.6,
-) -> dict:
+) -> dict[str, Any]:
     """
     Publish durable knowledge to the shared SAC immediately.
 
@@ -212,8 +212,8 @@ def sac_publish(
     )
 
 
-@mcp.tool()
-def sac_get_memory(memory_id: str) -> dict:
+@mcp.tool(structured_output=True)
+def sac_get_memory(memory_id: str) -> dict[str, Any]:
     """Rehydrate one shared memory item when the compact sync context lacks detail."""
     memory = store.get_memory(PROJECT_ID, memory_id)
     if memory is None:
@@ -221,8 +221,8 @@ def sac_get_memory(memory_id: str) -> dict:
     return {"ok": True, "memory": memory.as_dict(include_details=True)}
 
 
-@mcp.tool()
-def sac_status() -> dict:
+@mcp.tool(structured_output=True)
+def sac_status() -> dict[str, Any]:
     """Return current V0 shared-context status."""
     return {
         "project_id": PROJECT_ID,
@@ -251,7 +251,7 @@ app = FastAPI(
 
 
 @app.get("/health", include_in_schema=False)
-def health() -> dict:
+def health() -> dict[str, Any]:
     return {
         "ok": True,
         "project_id": PROJECT_ID,
@@ -260,7 +260,7 @@ def health() -> dict:
 
 
 @app.get("/api/status", operation_id="sac_status")
-def api_status() -> dict:
+def api_status() -> dict[str, Any]:
     return {
         "project_id": PROJECT_ID,
         "revision": store.current_revision(PROJECT_ID),
@@ -270,7 +270,7 @@ def api_status() -> dict:
 
 
 @app.post("/api/sync", operation_id="sac_sync_context")
-def api_sync(payload: SyncRequest) -> dict:
+def api_sync(payload: SyncRequest) -> dict[str, Any]:
     try:
         return sync_impl(**payload.model_dump())
     except ValueError as exc:
@@ -278,7 +278,7 @@ def api_sync(payload: SyncRequest) -> dict:
 
 
 @app.post("/api/publish", operation_id="sac_publish_context")
-def api_publish(payload: PublishRequest) -> dict:
+def api_publish(payload: PublishRequest) -> dict[str, Any]:
     try:
         return publish_impl(**payload.model_dump())
     except ValueError as exc:
@@ -286,7 +286,7 @@ def api_publish(payload: PublishRequest) -> dict:
 
 
 @app.get("/api/memory/{memory_id}", operation_id="sac_get_memory")
-def api_get_memory(memory_id: str) -> dict:
+def api_get_memory(memory_id: str) -> dict[str, Any]:
     memory = store.get_memory(PROJECT_ID, memory_id)
     if memory is None:
         raise HTTPException(status_code=404, detail="memory not found")
