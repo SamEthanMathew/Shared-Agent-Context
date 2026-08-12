@@ -6,26 +6,35 @@ It gives multiple people and multiple AI systems a persistent project brain that
 
 > **Models are replaceable. Project knowledge should persist.**
 
-## Runnable V0
+## Runnable V1 — core engine + privacy
 
-The repository now contains a runnable two-account proof of concept.
+The repository contains a runnable, deployable V1: the full core engine with
+server-enforced privacy, not the stripped-down proof.
 
-The deliberately narrow V0 tests one hypothesis:
+It answers the hypothesis:
 
-> **Can one ChatGPT-side account and one Claude-side account work independently while continuously benefiting from project knowledge produced by the other?**
+> **Can one ChatGPT-side account and one Claude-side account work independently while continuously benefiting from project knowledge produced by the other — with real identity and privacy?**
 
-V0 removes most product complexity:
+V1 implements:
 
-- one shared SAC project
-- one growing shared memory pool
-- no dashboard
-- no private SAC memories
-- no OAuth/ACL layer yet
-- no vector database requirement
-- no autonomous orchestration
-- one Python service
-- PostgreSQL in deployment, SQLite locally
-- MCP v2 + REST/OpenAPI over the same backend
+- **Verified identity** — in-service OAuth 2.1 authorization server (auth-code +
+  PKCE + dynamic client registration + CIMD), per-client connections, revocable
+  tokens. The model is never the authorization layer.
+- **Private + shared scopes** — permission filtering happens in SQL *before*
+  context is compiled; a model never receives memory it isn't authorized for.
+- **Provenance & history** — evidence events, memory versions, supersession,
+  minimal conflict surfacing, an audit log, and context snapshots that double as
+  privacy manifests.
+- **Human control plane** — `/console` to inspect memories, members, and the
+  audit feed, and to retract memories; `/auth/connections` to revoke clients.
+- **One deterministic engine** — lexical + type + importance + recency ranking
+  (no embeddings yet), monotonic per-project revisions, model-sized compiled
+  context.
+- One Python service; PostgreSQL in deployment, SQLite locally; MCP v2 +
+  REST/OpenAPI over the same backend.
+
+See [`docs/SETUP.md`](docs/SETUP.md) for deploy, client wiring, and the
+two-account acceptance test.
 
 The runtime model is:
 
@@ -78,27 +87,32 @@ other account receives the update on its next sync
 
 `sac_sync` also accepts a concise `local_context_delta` from the previous local turn, so a long-running provider-native conversation can continuously contribute knowledge to SAC without copying its entire transcript.
 
-### V0 endpoints
+### V1 endpoints
 
-One service exposes both integration surfaces:
+One service exposes both integration surfaces plus the OAuth and control planes:
 
 ```text
-/mcp                 MCP v2 Streamable HTTP
-/api/sync            REST equivalent of sac_sync
-/api/publish         REST equivalent of sac_publish
-/api/memory/{id}     rehydrate one memory
-/api/status          shared pool state
-/openapi.json        ChatGPT Action schema
-/health              liveness
+/mcp                          MCP v2 Streamable HTTP
+/v1/projects/{id}/context/sync    REST equivalent of sac_sync_context
+/v1/projects/{id}/memories/shared REST remember_shared (…/private for private)
+/v1/projects/{id}/memories        list; /{mid} rehydrate one memory
+/v1/projects/{id}/changes         recent changes
+/.well-known/oauth-*          OAuth discovery (RFC 8414 / 9728)
+/authorize /token /register   OAuth authorization-code + PKCE + DCR
+/auth/login /auth/consent     human login + consent
+/auth/connections             connected clients + revoke
+/console                      project view: memories, members, audit, retract
+/openapi.json                 ChatGPT Action schema (with servers block)
+/health                       liveness
 ```
 
-Current MCP tools:
+MCP tools:
 
 ```text
-sac_sync
-sac_publish
-sac_get_memory
-sac_status
+sac_project_info      sac_recent_changes
+sac_sync_context      sac_get_source
+sac_remember_shared   sac_get_memory
+sac_remember_private  sac_status
 ```
 
 ### Current test status
@@ -192,15 +206,13 @@ Eventually a project brain must know not only *what* it believes, but who said i
 
 The production architecture must filter data before it reaches a model. The current two-account V0 intentionally postpones this layer to test the core shared-context hypothesis first.
 
-## V0 Storage and Retrieval
+## V1 Storage and Retrieval
 
-The current proof uses three tables:
-
-```text
-project_counters
-memories
-sessions
-```
+The engine uses a full relational model (see `app/db.py`): `users`, `projects`,
+`memberships`, `agent_connections`, `sessions`, `evidence_events`, `memories`
+(with `scope`, `status`, `sensitivity`, versions), `memory_versions`,
+`memory_relations`, `context_snapshots`, `audit_events`, plus the OAuth tables
+(`oauth_clients`, `authorization_codes`, `oauth_tokens`, …).
 
 Every accepted shared memory increments a project revision:
 
@@ -235,12 +247,19 @@ This lets us test the product hypothesis before adding embeddings, rerankers, gr
 The included `render.yaml` defines a small Python web service and PostgreSQL database. The application can also run locally with SQLite.
 
 ```text
-app/main.py      FastAPI + MCPServer v2
-app/store.py     persistence + revision/session state
-app/context.py   V0 context compiler
+app/main.py      FastAPI + MCPServer v2 assembly, OAuth wiring
+app/db.py        full schema (engine + auth tables)
+app/stores/      projects, memories, sessions, snapshots, audit
+app/context.py   context compiler v2 (scoped sections, manifests)
+app/api/         impl layer, /v1 REST, MCP tools
+app/auth/        OAuth 2.1 provider, token store, login/consent, CLI
+app/control.py   human control plane
+migrations/      Alembic baseline
 ```
 
-CI uses the official stable MCP Python SDK v2 and tests both in-process and Streamable HTTP MCP calls.
+CI uses the stable MCP Python SDK v2 and runs the unit suite, an Alembic-apply
+check, a dev-mode Streamable HTTP smoke test, and a full auth-mode OAuth
+end-to-end test.
 
 ## MVP Success Criterion
 
