@@ -7,3 +7,7 @@ sac.db
 sac_v1.db
 *.sqlite
 *.sqlite3
+
+# Design-research sources — fetched locally, not redistributable.
+# See website/research/00-sources-and-provenance.md
+website/research/source-extracts/
