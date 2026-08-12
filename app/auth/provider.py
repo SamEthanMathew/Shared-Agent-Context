@@ -53,11 +53,16 @@ class SACAuthProvider:
     # --- clients ------------------------------------------------------------
 
     def _to_client_info(self, row: dict[str, Any]) -> OAuthClientInformationFull:
+        # V1 treats every client as a PUBLIC client: token_endpoint_auth_method
+        # "none" + mandatory PKCE (the SDK enforces S256). This avoids the trap
+        # of storing a secret hash we cannot return for the SDK to compare, which
+        # would otherwise let a "confidential" client be used without its secret.
+        # PKCE (code_verifier bound to the code) is the actual protection.
         return OAuthClientInformationFull(
             client_id=row["client_id"],
-            client_secret=None,  # secret is verified via hash in a custom path if needed
+            client_secret=None,
             redirect_uris=[AnyUrl(u) for u in (row["redirect_uris"] or [])],
-            token_endpoint_auth_method=row["token_endpoint_auth_method"],
+            token_endpoint_auth_method="none",
             grant_types=row["grant_types"] or ["authorization_code", "refresh_token"],
             response_types=row["response_types"] or ["code"],
             scope=row["scope"] or None,
@@ -79,9 +84,15 @@ class SACAuthProvider:
     ) -> OAuthClientInformationFull | None:
         # ChatGPT Client ID Metadata Documents: client_id is an https URL whose
         # body describes the client. Fetch, validate, and cache it.
-        if self.allowed_cimd_hosts and not _redirect_host_allowed(
-            client_id, self.allowed_cimd_hosts
-        ):
+        #
+        # SSRF hardening: CIMD is DISABLED unless SAC_CIMD_ALLOWED_HOSTS is set,
+        # so the server never fetches an arbitrary attacker-supplied URL. The
+        # allowlist is a set of public provider hosts (e.g. chatgpt.com); a bare
+        # IP or internal host can't match it. Redirects are refused and the body
+        # is size/time-capped below.
+        if not self.allowed_cimd_hosts:
+            return None
+        if not _redirect_host_allowed(client_id, self.allowed_cimd_hosts):
             return None
         try:
             async with httpx.AsyncClient(

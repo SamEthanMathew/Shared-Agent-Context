@@ -216,6 +216,13 @@ def test_bad_password_rejected(auth_env):
     assert "error=" in r.headers["location"]
 
 
+def test_cimd_disabled_without_allowlist(auth_env, monkeypatch):
+    # SSRF guard: with no SAC_CIMD_ALLOWED_HOSTS set, CIMD fetching is off.
+    monkeypatch.delenv("SAC_CIMD_ALLOWED_HOSTS", raising=False)
+    provider = _provider()
+    assert _run(provider.get_client("https://chatgpt.com/client.json")) is None
+
+
 def test_cimd_rejects_disallowed_host(auth_env, monkeypatch):
     monkeypatch.setenv("SAC_CIMD_ALLOWED_HOSTS", "chatgpt.com,openai.com")
     provider = _provider()

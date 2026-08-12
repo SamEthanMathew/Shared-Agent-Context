@@ -9,11 +9,15 @@ from __future__ import annotations
 
 from typing import Any
 
+from mcp.types import ToolAnnotations
+
 from ..identity import Principal, RequestIdentity
 from ..models import MemoryKind, Sensitivity
 from ..runtime import get_store
 from . import impl
 from .deps import auth_mode, resolve_identity
+
+_READ_ONLY = ToolAnnotations(read_only_hint=True)
 
 
 def _identity(
@@ -40,7 +44,7 @@ def _identity(
 def register(mcp) -> None:
     """Register all SAC tools on the given MCPServer instance."""
 
-    @mcp.tool(structured_output=True)
+    @mcp.tool(structured_output=True, annotations=_READ_ONLY)
     def sac_project_info(
         project_id: str | None = None, actor_email: str | None = None
     ) -> dict[str, Any]:
@@ -116,7 +120,7 @@ def register(mcp) -> None:
             session_ref=session_ref,
         )
 
-    @mcp.tool(structured_output=True)
+    @mcp.tool(structured_output=True, annotations=_READ_ONLY)
     def sac_recent_changes(
         session_ref: str | None = None,
         since_revision: int | None = None,
@@ -130,7 +134,7 @@ def register(mcp) -> None:
             session_ref=session_ref, since_revision=since_revision, limit=limit,
         )
 
-    @mcp.tool(structured_output=True)
+    @mcp.tool(structured_output=True, annotations=_READ_ONLY)
     def sac_get_source(
         source_id: str,
         project_id: str | None = None,
@@ -139,7 +143,7 @@ def register(mcp) -> None:
         """Fetch the evidence event a memory was derived from."""
         return impl.get_source(get_store(), _identity(actor_email, project_id), source_id)
 
-    @mcp.tool(structured_output=True)
+    @mcp.tool(structured_output=True, annotations=_READ_ONLY)
     def sac_get_memory(
         memory_id: str,
         include_versions: bool = False,
@@ -153,7 +157,7 @@ def register(mcp) -> None:
             include_versions=include_versions, include_relations=include_relations,
         )
 
-    @mcp.tool(structured_output=True)
+    @mcp.tool(structured_output=True, annotations=_READ_ONLY)
     def sac_status(
         project_id: str | None = None, actor_email: str | None = None
     ) -> dict[str, Any]:

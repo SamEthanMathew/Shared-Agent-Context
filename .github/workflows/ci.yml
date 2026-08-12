@@ -1,4 +1,4 @@
-name: SAC V0 CI
+name: SAC V1 CI
 
 on:
   push:
@@ -22,7 +22,12 @@ jobs:
         env:
           PYTHONPATH: .
         run: pytest -q
-      - name: Run Streamable HTTP MCP smoke test
+      - name: Verify Alembic baseline applies
+        env:
+          PYTHONPATH: .
+          DATABASE_URL: sqlite:///./ci_alembic.db
+        run: alembic upgrade head
+      - name: Run Streamable HTTP MCP smoke test (dev mode)
         env:
           PYTHONPATH: .
         run: |
@@ -30,3 +35,19 @@ jobs:
           SAC_PID=$!
           trap 'kill $SAC_PID 2>/dev/null || true' EXIT
           python tests/smoke_http_mcp.py || (cat /tmp/sac-uvicorn.log && exit 1)
+      - name: Run OAuth end-to-end test (auth mode)
+        env:
+          PYTHONPATH: .
+          SAC_AUTH_MODE: auth
+          SAC_PUBLIC_URL: http://127.0.0.1:8766
+          SAC_ALLOWED_REDIRECT_HOSTS: 127.0.0.1,localhost
+          SAC_BOOTSTRAP_ADMIN_EMAIL: admin@example.com
+          SAC_BOOTSTRAP_ADMIN_PASSWORD: ci-admin-pw
+        run: |
+          rm -f sac_v1.db
+          python -c "from app.stores import SACStore; from app.auth.bootstrap import bootstrap_admin; s=SACStore(); s.init(); uid=bootstrap_admin(s); s.projects.create_project('CI', owner_user_id=uid); print('seeded')"
+          uvicorn app.main:app --host 127.0.0.1 --port 8766 --proxy-headers > /tmp/sac-auth.log 2>&1 &
+          SAC_PID=$!
+          trap 'kill $SAC_PID 2>/dev/null || true' EXIT
+          sleep 3
+          python tests/oauth_e2e.py || (cat /tmp/sac-auth.log && exit 1)
