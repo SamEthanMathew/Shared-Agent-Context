@@ -534,6 +534,128 @@ button { font: inherit; color: inherit; }
 .toggle__btn[aria-pressed="true"] { background: var(--osmos-surface-raised); color: var(--osmos-text); }
 
 /* --------------------------------------------------------------------------
+   8b. Scope model — two private contexts, one shared project
+   The privacy argument made visible: switching the viewer dims the scope the
+   other account can never read.
+   -------------------------------------------------------------------------- */
+.scopes {
+  display: grid;
+  gap: var(--s-4);
+  grid-template-columns: 1fr;
+  align-items: stretch;
+}
+@media (min-width: 62rem) { .scopes { grid-template-columns: 1fr 1.15fr 1fr; } }
+.scopes > * { min-width: 0; }
+
+.scope {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-4);
+  background: var(--osmos-surface);
+  border: 1px solid var(--osmos-border);
+  border-radius: var(--osmos-radius-lg);
+  transition: opacity var(--t-standard) var(--ease),
+              border-color var(--t-standard) var(--ease);
+}
+.scope--shared {
+  background: var(--osmos-surface-raised);
+  border-color: color-mix(in srgb, var(--flow-3) 45%, transparent);
+}
+
+/* Dimmed = this account cannot read that scope.
+   The dim is applied to the content, not the whole card, so the "not visible"
+   explanation stays at full contrast — it is the point of the state, and
+   fading the message along with the data would bury it. */
+.scope[data-hidden="true"] .scope__head,
+.scope[data-hidden="true"] .scope__list { opacity: .38; }
+.scope[data-hidden="true"] .scope__lock { display: block; color: var(--osmos-text); }
+.scope[data-reading="true"] { border-color: color-mix(in srgb, var(--flow-5) 60%, transparent); }
+
+.scope__head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--s-3); }
+.scope__who { display: flex; align-items: center; gap: var(--s-3); min-width: 0; }
+.scope__avatar {
+  width: 26px; height: 26px; flex: none;
+  border-radius: 999px; display: grid; place-items: center;
+  font-size: .6875rem; font-weight: 600;
+  background: var(--osmos-bg); border: 1px solid var(--osmos-border);
+}
+.scope__mark { width: 26px; height: 26px; border-radius: 7px; flex: none; }
+.scope__name { font-size: .9375rem; font-weight: 600; line-height: 1.3; }
+.scope__tool { font-size: .75rem; color: var(--osmos-text-muted); }
+
+.scope__tag, .scope__rev {
+  flex: none;
+  padding: 3px var(--s-3);
+  border-radius: 999px;
+  font-size: .6875rem;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  border: 1px solid var(--osmos-border);
+  color: var(--osmos-text-muted);
+}
+.scope__rev {
+  font-family: var(--osmos-font-mono);
+  text-transform: none;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--osmos-text);
+  border-color: color-mix(in srgb, var(--flow-3) 50%, transparent);
+}
+.scope__lock {
+  display: none;
+  margin-top: auto;
+  padding-top: var(--s-3);
+  font-size: .75rem;
+  color: var(--osmos-text-muted);
+  border-top: 1px dashed var(--osmos-border);
+}
+
+.scope__list { display: flex; flex-direction: column; gap: var(--s-2); }
+
+.mem {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s-2);
+  padding: var(--s-3);
+  border-radius: var(--osmos-radius-sm);
+  background: var(--osmos-bg);
+  border: 1px solid var(--osmos-border);
+  font-size: .8125rem;
+  line-height: 1.5;
+}
+.mem--shared { border-left: 2px solid var(--flow-3); }
+.mem--private { border-left: 2px solid var(--osmos-text-muted); }
+.mem[data-new="true"] { animation: mem-in var(--t-standard) var(--ease) both; }
+@keyframes mem-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+
+.mem__kind {
+  flex: none;
+  font-family: var(--osmos-font-mono);
+  font-size: .625rem;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--osmos-text-muted);
+  padding: 1px 6px;
+  border: 1px solid var(--osmos-border);
+  border-radius: 4px;
+}
+.mem__src { margin-left: auto; font-size: .6875rem; color: var(--osmos-text-muted); }
+
+.scopes__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-4);
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--s-5);
+  padding-top: var(--s-5);
+  border-top: 1px solid var(--osmos-border);
+}
+.scopes__status { margin-top: var(--s-4); }
+
+/* --------------------------------------------------------------------------
    9. Provider strip
    -------------------------------------------------------------------------- */
 .providers { display: flex; flex-wrap: wrap; gap: var(--s-3); justify-content: center; }

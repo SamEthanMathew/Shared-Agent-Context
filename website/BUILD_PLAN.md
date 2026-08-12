@@ -49,6 +49,7 @@ website/site/
 ├── osmos.css            copy of ../osmos.css (see below)
 ├── styles.css           design system; layered on osmos.css
 ├── osmos-moment.js      the interactive handoff demo
+├── context-model.js     the private/shared scope model
 ├── theme.js             theme toggle + no-flash init
 └── assets/              logos, favicon, OG image
 ```
@@ -169,6 +170,49 @@ Implementation is inline SVG plus CSS custom-property transitions driven by a sm
 
 Why interactive rather than video: direct manipulation is the oldest and most-cited principle in
 Apple's HIG, and it is the strongest available proof for a product with nothing to photograph.
+
+---
+
+## 6b. The scope model — two private contexts, one shared project
+
+`#contexts` on the homepage, driven by `context-model.js`.
+
+Where the Osmos Moment shows *what happens*, this shows *how the data is arranged* — three zones:
+Person A's private scope, the shared project context, Person B's private scope.
+
+**The centrepiece is the viewer toggle.** Switching to "What B receives" dims Person A's private
+scope and surfaces the line *"Not visible to Person B."* This is the fastest way to make the
+permission model legible, and it is the demo identified in `../research/` as the highest value for
+the lowest build cost.
+
+### The accuracy constraint that shaped it
+
+Private memory is **not promoted** into shared. `sac_remember_private` and `sac_remember_shared` are
+separate writes (`app/api/mcp_tools.py`) — the agent routes each piece of knowledge to one scope or
+the other. So nothing ever animates from a private zone into the shared zone. The buttons publish to
+a destination:
+
+| Action | Shared layer | Revision | Other account sees it |
+|---|---|---|---|
+| Person A publishes a decision | gains an item | increments | yes, on next sync |
+| Person A saves a private note | unchanged | **unchanged** | never |
+
+That the revision does not move on a private write is the honest, load-bearing detail — it is
+verified in the test sweep, not just asserted.
+
+### Token framing
+
+The second supporting card says only what is true: `sac_sync_context` takes a `budget_tokens`
+argument that defaults to **3000**, and returns the highest-ranked context that fits the task rather
+than the whole project. **No invented savings percentages**, and no before/after token counts, since
+none have been measured.
+
+### Dimming and contrast
+
+The dim is applied to `.scope__head` and `.scope__list`, not the whole card, so the "Not visible"
+explanation stays at full contrast — fading the message along with the data would bury the very
+thing the state exists to communicate. Content dimmed below 0.6 opacity is intentionally
+de-emphasised (analogous to a disabled control) and is exempted from the contrast sweep.
 
 ---
 

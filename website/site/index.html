@@ -263,6 +263,97 @@
     </div>
   </section>
 
+  <!-- ================= Scope model ================= -->
+  <section class="section" id="contexts" aria-labelledby="ctx-h">
+    <div class="container">
+      <div class="section__head">
+        <span class="eyebrow">Private and shared</span>
+        <h2 class="t-h2" id="ctx-h">Two private contexts. One shared project.</h2>
+        <p class="t-lead" style="margin-top:var(--s-4)">Each person keeps their own working context. What the <em>project</em> needs to know is published to a shared layer both agents read from — so neither has to re-explain, and neither hands over everything.</p>
+      </div>
+
+      <div class="scopes" id="scope-model" data-viewer="none">
+
+        <section class="scope" data-zone="a" aria-labelledby="zone-a-h">
+          <header class="scope__head">
+            <span class="scope__who">
+              <span class="scope__avatar" aria-hidden="true">SM</span>
+              <span>
+                <span class="scope__name" id="zone-a-h">Person A</span><br>
+                <span class="scope__tool">ChatGPT</span>
+              </span>
+            </span>
+            <span class="scope__tag scope__tag--private">Private</span>
+          </header>
+          <ul class="scope__list" id="zone-a">
+            <li class="mem mem--private"><span class="mem__kind">note</span>Still unsure about the Redis cache — revisit</li>
+            <li class="mem mem--private"><span class="mem__kind">note</span>My TODO: refactor the auth middleware</li>
+          </ul>
+          <p class="scope__lock" hidden>Not visible to Person B</p>
+        </section>
+
+        <section class="scope scope--shared" aria-labelledby="zone-s-h">
+          <header class="scope__head">
+            <span class="scope__who">
+              <img class="scope__mark" src="assets/osmos-mark-dark.svg" alt="" width="26" height="26">
+              <span>
+                <span class="scope__name" id="zone-s-h">Shared project context</span><br>
+                <span class="scope__tool">Both accounts</span>
+              </span>
+            </span>
+            <span class="scope__rev" id="scope-rev">r42</span>
+          </header>
+          <ul class="scope__list" id="zone-shared">
+            <li class="mem mem--shared"><span class="mem__kind">decision</span>Public APIs use opaque cursor pagination<span class="mem__src">Person A</span></li>
+            <li class="mem mem--shared"><span class="mem__kind">constraint</span>Postgres 16, no extensions beyond pgcrypto<span class="mem__src">Person B</span></li>
+          </ul>
+        </section>
+
+        <section class="scope" data-zone="b" aria-labelledby="zone-b-h">
+          <header class="scope__head">
+            <span class="scope__who">
+              <span class="scope__avatar" aria-hidden="true">MA</span>
+              <span>
+                <span class="scope__name" id="zone-b-h">Person B</span><br>
+                <span class="scope__tool">Claude</span>
+              </span>
+            </span>
+            <span class="scope__tag scope__tag--private">Private</span>
+          </header>
+          <ul class="scope__list" id="zone-b">
+            <li class="mem mem--private"><span class="mem__kind">note</span>Client keeps changing the brief — keep receipts</li>
+          </ul>
+          <p class="scope__lock" hidden>Not visible to Person A</p>
+        </section>
+
+      </div>
+
+      <div class="scopes__controls">
+        <div class="btn-row">
+          <button class="btn btn--secondary btn--sm" type="button" id="ctx-publish">Person A publishes a decision</button>
+          <button class="btn btn--secondary btn--sm" type="button" id="ctx-private">Person A saves a private note</button>
+          <button class="btn btn--ghost btn--sm" type="button" id="ctx-reset">Reset</button>
+        </div>
+        <div class="toggle" role="group" aria-label="Show what each account receives on sync">
+          <button class="toggle__btn" type="button" id="ctx-view-a" aria-pressed="false">What A receives</button>
+          <button class="toggle__btn" type="button" id="ctx-view-b" aria-pressed="false">What B receives</button>
+        </div>
+      </div>
+      <p class="t-small scopes__status" id="ctx-status" role="status" aria-live="polite">Both accounts read the shared layer. Neither can read the other's private scope.</p>
+
+      <div class="grid grid--2" style="margin-top:var(--s-7)">
+        <div class="card">
+          <h3 class="t-h3 card__title">Nobody re-explains the project</h3>
+          <p class="t-body">The second agent doesn't need the first conversation pasted into it. It syncs the shared layer and starts from what the project already established.</p>
+        </div>
+        <div class="card">
+          <h3 class="t-h3 card__title">A budget, not a transcript</h3>
+          <p class="t-body">Each sync asks for a token budget — <code class="t-mono">budget_tokens</code>, 3000 by default — and Osmos returns the highest-ranked context that fits the task, rather than everything the project knows.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- ================= Pillars ================= -->
   <section class="section" aria-labelledby="pillars-h">
     <div class="container">
@@ -482,5 +573,6 @@
 
 <script src="theme.js"></script>
 <script src="osmos-moment.js"></script>
+<script src="context-model.js"></script>
 </body>
 </html>
