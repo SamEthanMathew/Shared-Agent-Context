@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException
-from mcp.server.fastmcp import FastMCP
+from mcp.server import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel, Field
 
@@ -34,12 +34,9 @@ For an enabled project chat:
 This V0 intentionally treats all published project knowledge as shared.
 """.strip()
 
-mcp = FastMCP(
+mcp = MCPServer(
     "Shared Agent Context V0",
     instructions=MCP_INSTRUCTIONS,
-    json_response=True,
-    stateless_http=True,
-    streamable_http_path="/",
 )
 
 # V0 is intentionally unauthenticated and publicly reachable for a two-account proof.
@@ -48,7 +45,15 @@ mcp = FastMCP(
 transport_security = TransportSecuritySettings(
     enable_dns_rebinding_protection=False
 )
-mcp_app = mcp.streamable_http_app(transport_security=transport_security)
+
+# MCP SDK v2 moved transport/runtime configuration out of the server constructor.
+# streamable_http_path="/" makes the mounted endpoint exactly /mcp instead of /mcp/mcp.
+mcp_app = mcp.streamable_http_app(
+    streamable_http_path="/",
+    json_response=True,
+    stateless_http=True,
+    transport_security=transport_security,
+)
 
 
 class SyncRequest(BaseModel):
@@ -254,7 +259,7 @@ def health() -> dict:
     }
 
 
-@app.get("/api/status")
+@app.get("/api/status", operation_id="sac_status")
 def api_status() -> dict:
     return {
         "project_id": PROJECT_ID,
@@ -264,7 +269,7 @@ def api_status() -> dict:
     }
 
 
-@app.post("/api/sync")
+@app.post("/api/sync", operation_id="sac_sync_context")
 def api_sync(payload: SyncRequest) -> dict:
     try:
         return sync_impl(**payload.model_dump())
@@ -272,7 +277,7 @@ def api_sync(payload: SyncRequest) -> dict:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@app.post("/api/publish")
+@app.post("/api/publish", operation_id="sac_publish_context")
 def api_publish(payload: PublishRequest) -> dict:
     try:
         return publish_impl(**payload.model_dump())
@@ -280,7 +285,7 @@ def api_publish(payload: PublishRequest) -> dict:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@app.get("/api/memory/{memory_id}")
+@app.get("/api/memory/{memory_id}", operation_id="sac_get_memory")
 def api_get_memory(memory_id: str) -> dict:
     memory = store.get_memory(PROJECT_ID, memory_id)
     if memory is None:
