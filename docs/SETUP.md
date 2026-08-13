@@ -51,6 +51,30 @@ Records are **private to the person whose agent made the call** — a snapshot
 enumerates that person's private memories, so not even a context owner can read
 someone else's.
 
+## How long data is kept
+
+A `sac-reaper` cron job (`scripts/reaper.py`, daily) applies retention. It is a
+separate job rather than a thread in the web service on purpose: a reaper inside
+the web process dies with every deploy and runs twice as soon as there are two
+instances. Run `python scripts/reaper.py --dry-run` to see what a pass would
+remove without removing it.
+
+| Data | Kept |
+|---|---|
+| **Memory** (shared and private) | **Indefinitely.** Retention never touches the product's actual content. |
+| **Audit trail** — who shared what with whom, access changes, archiving | **Indefinitely.** Small, append-only, and the record you need to answer a question about the past. |
+| **Sync records** — what each agent was shown per turn | **90 days** (`SAC_RETENTION_DAYS_SNAPSHOTS`). |
+| Expired OAuth transactions, codes, access tokens, sessions, email tokens | Deleted once expired. |
+| Revoked refresh tokens | 30 days, so "when did this connection lose access" stays answerable. |
+| Rate-limit counters | 1 day. |
+
+The 90-day window on sync records is a privacy decision, not only a storage one.
+Each record enumerates the memories fed to one person's agent — including their
+private ones — so keeping them forever accumulates a detailed history of what
+each person's assistant saw. Ninety days is long enough to answer "what exactly
+did Claude know when it said that", and short enough that the record does not
+become an asset in its own right.
+
 ## Archiving a context
 
 An owner can archive a context from its console page. It disappears from every
@@ -157,6 +181,9 @@ reaches a model.
 | `SAC_GOOGLE_CLIENT_ID` / `SAC_GOOGLE_CLIENT_SECRET` | Enables "Continue with Google". Absent → the button is not shown. |
 | `SAC_GITHUB_CLIENT_ID` / `SAC_GITHUB_CLIENT_SECRET` | Enables "Continue with GitHub". |
 | `SAC_SECRET_KEY` | Signs CSRF tokens. Optional: unset means a per-process key, so tokens stop validating across a restart and the app quietly reissues one. Set it to avoid that. |
+| `SAC_DB_POOL_SIZE` / `SAC_DB_MAX_OVERFLOW` | Connections per process (default 10 + 10). `app/main.py` caps the worker-thread pool to the same total, so the process never accepts more concurrency than the database can serve. Their sum × instances, plus the reaper, must stay under the Postgres plan's `max_connections`. |
+| `SAC_RETENTION_DAYS_SNAPSHOTS` | How long sync records are kept (default 90). See *How long data is kept*. |
+| `SAC_COMPILE_CANDIDATE_LIMIT` | Live memories one sync may rank (default 750). Past this a sync considers the most recent slice and reports `candidates_truncated`. |
 | `SAC_MAX_CONTEXTS_PER_USER` etc. | Quota overrides — see `app/limits.py`. |
 
 ### Sign-in with Google or GitHub

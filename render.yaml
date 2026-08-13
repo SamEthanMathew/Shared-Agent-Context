@@ -49,8 +49,52 @@ services:
         sync: false
       - key: RESEND_API_KEY
         sync: false
+      # Connection pool. app/main.py caps the worker-thread pool to the same
+      # total, so the process never accepts more concurrency than the database
+      # can serve. pool_size + max_overflow, times instances, plus the retention
+      # job, must stay under the Postgres plan's max_connections.
+      - key: SAC_DB_POOL_SIZE
+        value: "10"
+      - key: SAC_DB_MAX_OVERFLOW
+        value: "10"
       # Set these in the Render dashboard (sync:false keeps them out of git).
       - key: SAC_BOOTSTRAP_ADMIN_EMAIL
         sync: false
       - key: SAC_BOOTSTRAP_ADMIN_PASSWORD
         sync: false
+      # Federated sign-in. Absent → the buttons are simply not rendered.
+      - key: SAC_GOOGLE_CLIENT_ID
+        sync: false
+      - key: SAC_GOOGLE_CLIENT_SECRET
+        sync: false
+      # Signs CSRF tokens. Without it they are per-process, so a restart makes
+      # every open tab reissue one on its next /v1/me.
+      - key: SAC_SECRET_KEY
+        generateValue: true
+
+  # Data retention. A separate job rather than a thread in the web service: a
+  # reaper inside the web process dies with every deploy and would run twice as
+  # soon as there are two instances. Here its failures are visible and it cannot
+  # slow a request. Idempotent, so a missed run simply catches up.
+  - type: cron
+    name: sac-reaper
+    runtime: python
+    plan: starter
+    schedule: "17 4 * * *"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python scripts/reaper.py
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: sac-v1-db
+          property: connectionString
+      # Sync records answer "what did the agent know when it said that". Worth
+      # 90 days; not worth forever, since each one enumerates a person's private
+      # memory. The audit trail is kept indefinitely and never reaped.
+      - key: SAC_RETENTION_DAYS_SNAPSHOTS
+        value: "90"
+      # The job is short-lived and single-threaded; it needs very few.
+      - key: SAC_DB_POOL_SIZE
+        value: "2"
+      - key: SAC_DB_MAX_OVERFLOW
+        value: "1"
