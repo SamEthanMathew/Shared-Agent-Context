@@ -194,54 +194,98 @@ if AUTH_ENABLED:
         body["client_id_metadata_document_supported"] = True
         return JSONResponse(body)
 
-    # Methods that mutate state need the write scope; everything else needs read.
-    _WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
-    @app.middleware("http")
-    async def rest_bearer_auth(request: Request, call_next):
-        # Protect /v1 with the same token verifier as the MCP surface.
-        if request.url.path.startswith("/v1"):
-            from .identity import Principal
-            from .models import READ_SCOPE, WRITE_SCOPE
+@app.middleware("http")
+async def api_auth(request: Request, call_next):
+    """Authenticate /v1 as either an AI client or a signed-in browser.
 
-            header = request.headers.get("authorization", "")
-            token = header[7:].strip() if header.lower().startswith("bearer ") else ""
-            access = await provider.load_access_token(token) if token else None
-            if access is None:
-                metadata = f"{PUBLIC_URL}/.well-known/oauth-protected-resource/mcp"
-                return JSONResponse(
-                    status_code=401,
-                    content={"detail": "authentication required"},
-                    headers={
-                        "WWW-Authenticate": (
-                            f'Bearer error="invalid_token", resource_metadata="{metadata}"'
-                        )
-                    },
-                )
-            scopes = tuple(access.scopes or ())
-            # Enforce the scopes the token was actually granted. Without this a
-            # read-only connection could write (audit finding).
-            required = (
-                WRITE_SCOPE if request.method in _WRITE_METHODS else READ_SCOPE
-            )
-            if required not in scopes:
-                return JSONResponse(
-                    status_code=403,
-                    content={"detail": "insufficient_scope"},
-                    headers={
-                        "WWW-Authenticate": (
-                            f'Bearer error="insufficient_scope", scope="{required}"'
-                        )
-                    },
-                )
-            claims = access.claims or {}
-            request.state.principal = Principal(
-                user_id=access.subject or claims.get("user_id"),
-                agent_connection_id=claims.get("agent_connection_id"),
-                scopes=scopes,
-                label=claims.get("connection_label", ""),
-            )
+    Two credential types reach this API. A bearer token identifies a delegated
+    OAuth client and is constrained by the scopes it was granted. A session
+    cookie identifies a person using the web app directly.
+
+    An explicit bearer token always wins: if one is presented it must be valid,
+    and a bad token is never allowed to fall back to whatever cookie happens to
+    be in the jar — that would let an expired agent silently act as the human.
+    """
+    if not request.url.path.startswith("/v1"):
         return await call_next(request)
+
+    from .browser import (
+        CSRF_HEADER,
+        SESSION_COOKIE,
+        UNSAFE_METHODS,
+        csrf_ok,
+        origin_allowed,
+        principal_from_session,
+    )
+    from .identity import Principal
+    from .models import READ_SCOPE, WRITE_SCOPE
+
+    def _unauthenticated() -> JSONResponse:
+        metadata = f"{PUBLIC_URL}/.well-known/oauth-protected-resource/mcp"
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "authentication required"},
+            headers={
+                "WWW-Authenticate": (
+                    f'Bearer error="invalid_token", resource_metadata="{metadata}"'
+                )
+            },
+        )
+
+    header = request.headers.get("authorization", "")
+    token = header[7:].strip() if header.lower().startswith("bearer ") else ""
+
+    if token:
+        if not AUTH_ENABLED or provider is None:
+            return _unauthenticated()
+        access = await provider.load_access_token(token)
+        if access is None:
+            return _unauthenticated()
+        scopes = tuple(access.scopes or ())
+        # Enforce the scopes the token was actually granted. Without this a
+        # read-only connection could write (audit finding).
+        required = WRITE_SCOPE if request.method in UNSAFE_METHODS else READ_SCOPE
+        if required not in scopes:
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "insufficient_scope"},
+                headers={
+                    "WWW-Authenticate": (
+                        f'Bearer error="insufficient_scope", scope="{required}"'
+                    )
+                },
+            )
+        claims = access.claims or {}
+        request.state.principal = Principal(
+            user_id=access.subject or claims.get("user_id"),
+            agent_connection_id=claims.get("agent_connection_id"),
+            scopes=scopes,
+            label=claims.get("connection_label", ""),
+        )
+        return await call_next(request)
+
+    sid = request.cookies.get(SESSION_COOKIE)
+    principal = principal_from_session(get_store(), sid)
+    if principal is not None:
+        if request.method in UNSAFE_METHODS:
+            if not origin_allowed(request, PUBLIC_URL):
+                return JSONResponse(
+                    status_code=403, content={"detail": "cross_origin_refused"}
+                )
+            presented = request.headers.get(CSRF_HEADER) or ""
+            if not csrf_ok(sid or "", presented):
+                return JSONResponse(
+                    status_code=403, content={"detail": "csrf_required"}
+                )
+        request.state.principal = principal
+        return await call_next(request)
+
+    if AUTH_ENABLED:
+        return _unauthenticated()
+    # Dev mode only: fall through so the X-SAC-User header can identify the
+    # caller. Never reachable on a real deployment.
+    return await call_next(request)
 
 
 @app.middleware("http")

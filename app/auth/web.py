@@ -13,12 +13,13 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from mcp.server.auth.provider import construct_redirect_uri
 
+from ..browser import SESSION_COOKIE, clear_session_cookies, set_session_cookies
 from ..models import ROLE_TO_ACCESS
 from ..runtime import get_store
 
 router = APIRouter()
 
-COOKIE = "sac_session"
+COOKIE = SESSION_COOKIE
 
 
 def _secure(request: Request) -> bool:
@@ -162,9 +163,7 @@ def login_submit(
         return RedirectResponse(url, status_code=303)
     sid = store.auth.create_login_session(user["id"])
     resp = RedirectResponse(_post_login_target(txn, next), status_code=303)
-    resp.set_cookie(
-        COOKIE, sid, httponly=True, secure=_secure(request), samesite="lax", path="/"
-    )
+    set_session_cookies(resp, sid, secure=_secure(request))
     return resp
 
 
@@ -174,7 +173,7 @@ def logout(request: Request):
     if sid:
         get_store().auth.revoke_login_session(sid)
     resp = RedirectResponse("/auth/login", status_code=303)
-    resp.delete_cookie(COOKIE, path="/")
+    clear_session_cookies(resp)
     return resp
 
 
@@ -236,9 +235,7 @@ def signup_submit(
 
     sid = store.auth.create_login_session(user_id)
     resp = RedirectResponse(nxt or "/console", status_code=303)
-    resp.set_cookie(
-        COOKIE, sid, httponly=True, secure=_secure(request), samesite="lax", path="/"
-    )
+    set_session_cookies(resp, sid, secure=_secure(request))
     return resp
 
 

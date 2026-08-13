@@ -29,6 +29,50 @@ from .schemas import (
 router = APIRouter(prefix="/v1")
 
 
+# --- who am I ---------------------------------------------------------------
+
+
+@router.get("/me", operation_id="get_me")
+def get_me(request: Request) -> Any:
+    """Everything the web app needs to render its first frame.
+
+    One round trip returns the account, its contexts, and a usable CSRF token —
+    reissuing the cookie if the session outlived it, so a stale tab repairs
+    itself instead of failing its first write.
+    """
+    from fastapi.responses import JSONResponse
+
+    from ..browser import CSRF_COOKIE, SESSION_COOKIE, csrf_token_for
+
+    store = get_store()
+    principal = _principal(request)
+    user = store.projects.get_user(principal.user_id)
+    if user is None:
+        raise ForbiddenError("unknown user")
+
+    sid = request.cookies.get(SESSION_COOKIE) or ""
+    token = csrf_token_for(sid) if sid else ""
+    body = {
+        "ok": True,
+        "user": {
+            "id": user["id"],
+            "email": user["email"],
+            "display_name": user["display_name"],
+            "email_verified": user["email_verified_at"] is not None,
+        },
+        "contexts": impl.list_contexts(store, principal)["contexts"],
+        "csrf_token": token,
+    }
+    response = JSONResponse(body)
+    if sid and request.cookies.get(CSRF_COOKIE) != token:
+        response.set_cookie(
+            CSRF_COOKIE, token,
+            httponly=False, secure=request.url.scheme == "https",
+            samesite="lax", path="/",
+        )
+    return response
+
+
 def _principal(request: Request) -> Principal:
     existing = getattr(request.state, "principal", None)
     if existing is not None:
