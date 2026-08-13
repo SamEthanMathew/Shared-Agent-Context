@@ -32,16 +32,45 @@ def _slugify(name: str) -> str:
     return slug[:100] or "context"
 
 
+def _existing() -> tuple[set[str], dict[str, set[str]]]:
+    """What is already present.
+
+    The app calls ``metadata.create_all`` at startup, so a database can arrive
+    here with the new TABLES already created (create_all makes tables) but the
+    new COLUMNS missing (create_all never alters an existing table). This
+    migration therefore has to be idempotent per object rather than assuming
+    an all-or-nothing starting point.
+    """
+    insp = sa.inspect(op.get_bind())
+    tables = set(insp.get_table_names())
+    columns = {t: {c["name"] for c in insp.get_columns(t)} for t in tables}
+    return tables, columns
+
+
 def upgrade() -> None:
+    tables, columns = _existing()
+
+    def create_table(name: str, *args, **kwargs) -> None:
+        if name not in tables:
+            op.create_table(name, *args, **kwargs)
+
+    def create_index(name: str, table: str, cols, **kwargs) -> None:
+        if table not in tables:  # freshly created above, so the index is new
+            op.create_index(name, table, cols, **kwargs)
+
+    def add_column(table: str, column) -> None:
+        if column.name not in columns.get(table, set()):
+            op.add_column(table, column)
+
     # --- new tables ---------------------------------------------------------
-    op.create_table(
+    create_table(
         "rate_events",
         sa.Column("key", sa.String(length=255), nullable=False),
         sa.Column("window_start", sa.DateTime(timezone=True), nullable=False),
         sa.Column("count", sa.Integer(), nullable=False),
         sa.PrimaryKeyConstraint("key", "window_start"),
     )
-    op.create_table(
+    create_table(
         "email_tokens",
         sa.Column("id", sa.String(length=36), nullable=False),
         sa.Column("user_id", sa.String(length=36), nullable=False),
@@ -55,9 +84,9 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("token_hash"),
     )
-    op.create_index("ix_email_tokens_user", "email_tokens", ["user_id"], unique=False)
+    create_index("ix_email_tokens_user", "email_tokens", ["user_id"], unique=False)
 
-    op.create_table(
+    create_table(
         "context_bindings",
         sa.Column("id", sa.String(length=36), nullable=False),
         sa.Column("user_id", sa.String(length=36), nullable=False),
@@ -75,9 +104,9 @@ def upgrade() -> None:
             name="uq_context_binding",
         ),
     )
-    op.create_index("ix_bindings_user", "context_bindings", ["user_id"], unique=False)
+    create_index("ix_bindings_user", "context_bindings", ["user_id"], unique=False)
 
-    op.create_table(
+    create_table(
         "invites",
         sa.Column("id", sa.String(length=36), nullable=False),
         sa.Column("project_id", sa.String(length=36), nullable=False),
@@ -99,23 +128,23 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("code_hash"),
     )
-    op.create_index("ix_invites_email", "invites", ["email"], unique=False)
-    op.create_index("ix_invites_project", "invites", ["project_id"], unique=False)
+    create_index("ix_invites_email", "invites", ["email"], unique=False)
+    create_index("ix_invites_project", "invites", ["project_id"], unique=False)
 
     # --- users: account lifecycle ------------------------------------------
-    op.add_column(
+    add_column(
         "users", sa.Column("email_verified_at", sa.DateTime(timezone=True), nullable=True)
     )
-    op.add_column(
+    add_column(
         "users", sa.Column("last_login_at", sa.DateTime(timezone=True), nullable=True)
     )
-    op.add_column(
+    add_column(
         "users",
         sa.Column(
             "failed_login_count", sa.Integer(), nullable=False, server_default="0"
         ),
     )
-    op.add_column(
+    add_column(
         "users", sa.Column("locked_until", sa.DateTime(timezone=True), nullable=True)
     )
     # Accounts that predate public signup were provisioned by an operator, so
@@ -125,8 +154,8 @@ def upgrade() -> None:
     )
 
     # --- projects: slug + archive ------------------------------------------
-    op.add_column("projects", sa.Column("slug", sa.String(length=120), nullable=True))
-    op.add_column(
+    add_column("projects", sa.Column("slug", sa.String(length=120), nullable=True))
+    add_column(
         "projects", sa.Column("archived_at", sa.DateTime(timezone=True), nullable=True)
     )
 
@@ -146,8 +175,11 @@ def upgrade() -> None:
             {"slug": candidate, "id": row[0]},
         )
 
-    with op.batch_alter_table("projects") as batch:
-        batch.create_unique_constraint("uq_projects_slug", ["slug"])
+    insp = sa.inspect(conn)
+    existing_uniques = {u["name"] for u in insp.get_unique_constraints("projects")}
+    if "uq_projects_slug" not in existing_uniques:
+        with op.batch_alter_table("projects") as batch:
+            batch.create_unique_constraint("uq_projects_slug", ["slug"])
 
     # --- backfill bindings for an existing single-context deployment --------
     # If a user has exactly one membership, pin each of their live connections
@@ -163,7 +195,18 @@ def upgrade() -> None:
             """
         )
     ).fetchall()
+    import uuid as _uuid
+
     for user_id, conn_id, project_id in bindings:
+        already = conn.execute(
+            sa.text(
+                "SELECT 1 FROM context_bindings WHERE user_id = :u "
+                "AND agent_connection_id = :c AND client_session_ref IS NULL"
+            ),
+            {"u": user_id, "c": conn_id},
+        ).first()
+        if already:
+            continue
         conn.execute(
             sa.text(
                 "INSERT INTO context_bindings "
@@ -171,7 +214,7 @@ def upgrade() -> None:
                 "VALUES (:id, :user_id, :conn_id, NULL, :project_id, CURRENT_TIMESTAMP)"
             ),
             {
-                "id": f"{user_id[:8]}-{conn_id[:8]}-backfill-0000-000000000000"[:36],
+                "id": str(_uuid.uuid4()),
                 "user_id": user_id,
                 "conn_id": conn_id,
                 "project_id": project_id,
