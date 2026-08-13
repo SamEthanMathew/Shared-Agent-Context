@@ -109,6 +109,13 @@ class SACAuthProvider:
         redirect_uris = doc.get("redirect_uris") or []
         if not redirect_uris:
             return None
+        # Apply the same redirect allowlist DCR enforces. Previously a CIMD
+        # document could name any redirect host (audit finding).
+        if self.allowed_redirect_hosts and not all(
+            _redirect_host_allowed(u, self.allowed_redirect_hosts)
+            for u in redirect_uris
+        ):
+            return None
         store = get_store()
         store.auth.upsert_client(
             {
@@ -130,6 +137,17 @@ class SACAuthProvider:
 
     async def register_client(self, client_info: OAuthClientInformationFull) -> None:
         # DCR: the SDK already generated client_id/secret and validated scopes.
+        #
+        # V1/V2 treat every client as PUBLIC with mandatory PKCE, because we
+        # store only a hash and the SDK compares plaintext — a stored secret
+        # could never be verified. Rather than hand back a secret we will always
+        # ignore (audit finding: clients were told client_secret_post was in
+        # force when it was not), strip it here so the registration response is
+        # truthful. The SDK returns this same object to the client.
+        client_info.client_secret = None
+        client_info.client_secret_expires_at = None
+        client_info.token_endpoint_auth_method = "none"
+
         redirect_uris = [str(u) for u in client_info.redirect_uris]
         for uri in redirect_uris:
             if not _redirect_host_allowed(uri, self.allowed_redirect_hosts):
@@ -140,15 +158,14 @@ class SACAuthProvider:
                     error_description=f"redirect host not allowed: {uri}",
                 )
         store = get_store()
-        secret_hash = None
-        if client_info.client_secret:
-            from .store import sha256
-
-            secret_hash = sha256(client_info.client_secret)
+        raw = client_info.model_dump(mode="json")
+        # Never persist a secret in raw_metadata (audit finding: it was stored
+        # in cleartext alongside its hash).
+        raw.pop("client_secret", None)
         store.auth.upsert_client(
             {
                 "client_id": client_info.client_id,
-                "client_secret_hash": secret_hash,
+                "client_secret_hash": None,
                 "token_endpoint_auth_method": client_info.token_endpoint_auth_method,
                 "redirect_uris": redirect_uris,
                 "grant_types": list(client_info.grant_types or []),
@@ -158,7 +175,7 @@ class SACAuthProvider:
                 "client_uri": str(client_info.client_uri) if client_info.client_uri else None,
                 "logo_uri": str(client_info.logo_uri) if client_info.logo_uri else None,
                 "registration_source": "dcr",
-                "raw_metadata": client_info.model_dump(mode="json"),
+                "raw_metadata": raw,
             }
         )
 
@@ -295,6 +312,19 @@ class SACAuthProvider:
         get_store().auth.revoke_token_by_value(token.token)
 
 
+# Fail closed: if the operator sets no allowlist we still refuse arbitrary
+# redirect hosts rather than accepting anything (audit finding: the check
+# previously failed open when the env var was unset).
+DEFAULT_REDIRECT_HOSTS = (
+    "claude.ai",
+    "claude.com",
+    "chatgpt.com",
+    "openai.com",
+    "localhost",
+    "127.0.0.1",
+)
+
+
 def build_provider() -> SACAuthProvider:
     public_url = (os.getenv("SAC_PUBLIC_URL") or os.getenv("RENDER_EXTERNAL_URL") or "").rstrip("/")
 
@@ -304,6 +334,6 @@ def build_provider() -> SACAuthProvider:
 
     return SACAuthProvider(
         public_url=public_url,
-        allowed_redirect_hosts=_hosts("SAC_ALLOWED_REDIRECT_HOSTS"),
+        allowed_redirect_hosts=_hosts("SAC_ALLOWED_REDIRECT_HOSTS") or DEFAULT_REDIRECT_HOSTS,
         allowed_cimd_hosts=_hosts("SAC_CIMD_ALLOWED_HOSTS"),
     )

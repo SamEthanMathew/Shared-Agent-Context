@@ -24,12 +24,19 @@ def test_create_all_is_idempotent(tmp_path):
     from sqlalchemy import inspect
 
     names = set(inspect(store.engine).get_table_names())
-    assert {"users", "projects", "memberships", "agent_connections", "sessions",
-            "evidence_events", "memories", "memory_versions", "memory_relations",
-            "context_snapshots", "audit_events", "oauth_clients",
-            "auth_transactions", "authorization_codes", "oauth_tokens",
-            "login_sessions"} <= names
-    assert len(metadata.tables) == 16
+    expected = {
+        # engine
+        "users", "projects", "memberships", "agent_connections", "sessions",
+        "evidence_events", "memories", "memory_versions", "memory_relations",
+        "context_snapshots", "audit_events",
+        # oauth
+        "oauth_clients", "auth_transactions", "authorization_codes",
+        "oauth_tokens", "login_sessions",
+        # multi-context + accounts (V2)
+        "context_bindings", "invites", "email_tokens", "rate_events",
+    }
+    assert expected <= names
+    assert set(metadata.tables) == expected
 
 
 def test_scope_owner_check_constraint(tmp_path):

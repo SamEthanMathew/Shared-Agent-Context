@@ -22,11 +22,40 @@ jobs:
         env:
           PYTHONPATH: .
         run: pytest -q
-      - name: Verify Alembic baseline applies
+      - name: Verify Alembic migrations apply
         env:
           PYTHONPATH: .
           DATABASE_URL: sqlite:///./ci_alembic.db
         run: alembic upgrade head
+
+      - name: Verify migrations are safe against existing data
+        env:
+          PYTHONPATH: .
+          DATABASE_URL: sqlite:///./ci_upgrade.db
+        run: |
+          alembic upgrade 0001
+          python - <<'PY'
+          import uuid, datetime as dt
+          from sqlalchemy import create_engine, text
+          e = create_engine("sqlite:///./ci_upgrade.db")
+          now = dt.datetime.now(dt.timezone.utc).isoformat()
+          uid, pid, cid = str(uuid.uuid4()), str(uuid.uuid4()), str(uuid.uuid4())
+          with e.begin() as c:
+              c.execute(text("INSERT INTO users (id,email,display_name,is_admin,created_at) VALUES (:i,:e,'A',1,:t)"), {"i":uid,"e":"a@example.com","t":now})
+              c.execute(text("INSERT INTO projects (id,name,description,owner_user_id,context_revision,settings,created_at,updated_at) VALUES (:i,'P','',:o,3,'{}',:t,:t)"), {"i":pid,"o":uid,"t":now})
+              c.execute(text("INSERT INTO memberships (project_id,user_id,role,created_at) VALUES (:p,:u,'owner',:t)"), {"p":pid,"u":uid,"t":now})
+              c.execute(text("INSERT INTO agent_connections (id,user_id,label,provider_hint,client_type,granted_scopes,created_at) VALUES (:i,:u,'C','dcr','mcp','[]',:t)"), {"i":cid,"u":uid,"t":now})
+          PY
+          alembic upgrade head
+          python - <<'PY'
+          from sqlalchemy import create_engine, text
+          e = create_engine("sqlite:///./ci_upgrade.db")
+          with e.begin() as c:
+              assert c.execute(text("SELECT slug FROM projects")).scalar() == "p", "slug not backfilled"
+              assert c.execute(text("SELECT context_revision FROM projects")).scalar() == 3, "revision lost"
+              assert c.execute(text("SELECT COUNT(*) FROM context_bindings")).scalar() == 1, "binding not backfilled"
+          print("upgrade-with-data OK")
+          PY
       - name: Run Streamable HTTP MCP smoke test (dev mode)
         env:
           PYTHONPATH: .
@@ -45,7 +74,10 @@ jobs:
           SAC_BOOTSTRAP_ADMIN_PASSWORD: ci-admin-pw
         run: |
           rm -f sac_v1.db
-          python -c "from app.stores import SACStore; from app.auth.bootstrap import bootstrap_admin; s=SACStore(); s.init(); uid=bootstrap_admin(s); s.projects.create_project('CI', owner_user_id=uid); print('seeded')"
+          # bootstrap_admin already creates a starter context; adding another
+          # here would make the admin ambiguous and (correctly) trigger
+          # needs_context_selection.
+          python -c "from app.stores import SACStore; from app.auth.bootstrap import bootstrap_admin; s=SACStore(); s.init(); uid=bootstrap_admin(s); print('seeded', uid)"
           uvicorn app.main:app --host 127.0.0.1 --port 8766 --proxy-headers > /tmp/sac-auth.log 2>&1 &
           SAC_PID=$!
           trap 'kill $SAC_PID 2>/dev/null || true' EXIT

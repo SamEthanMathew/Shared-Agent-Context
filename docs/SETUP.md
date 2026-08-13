@@ -1,23 +1,73 @@
-# SAC V1 — Deploy & Connect Runbook
+# SAC — Deploy & Connect Runbook
 
-This is the operational guide for the runnable V1: the full core engine with
-private/shared memory scopes, server-enforced permissions, and an in-service
-OAuth 2.1 authorization server. It replaces the stripped-down
+Operational guide for the deployed service: multiple named **shared contexts**,
+private/shared memory scopes, server-enforced permissions, sharing by email, and
+an in-service OAuth 2.1 authorization server. Replaces the stripped-down
 [`V0_MCP_PROTOTYPE.md`](V0_MCP_PROTOTYPE.md) (kept for history).
 
-## What V1 is
+## Terminology
+
+Users see **contexts**; the code and the older design docs say **projects**.
+They are the same thing — `projects` is the internal table name, `context` is
+the word in tools, URLs, and the UI. Tool parameters accept a context's **name,
+slug, or id**.
+
+## Working with contexts
+
+Twelve MCP tools. Four manage which context you are in:
+
+| Tool | What it does |
+|---|---|
+| `sac_list_contexts` | Every context available to you, and which is active |
+| `sac_create_context` | Create one (you become owner) and start using it |
+| `sac_use_context` | Switch. `scope="chat"` pins one conversation only |
+| `sac_context_info` | Which context am I in, and what may I do here |
+
+Eight use it: `sac_sync_context`, `sac_remember_shared`, `sac_remember_private`,
+`sac_recent_changes`, `sac_get_source`, `sac_get_memory`, `sac_project_info`,
+`sac_status`.
+
+Every response carries an `active_context` block, and the compiled context leads
+with `ACTIVE CONTEXT: <name> · your access: <level> · r<revision>`, so the agent
+can always tell you where it is working. If no context can be determined, tools
+return `needs_context_selection` with your list — the agent asks rather than
+guessing.
+
+**Sharing is never an agent tool.** Only a human can grant access, from the
+website.
+
+## Sharing a context
+
+`/console/c/{id}` → **Share this context** → email + access level:
+
+| Level | Can |
+|---|---|
+| **View** | Read shared memory. Writes are refused by the server. |
+| **Edit** | Read, and publish shared + own private memory. |
+| **Manage** | Edit, plus share with others and change access. |
+
+If the address already has an account they get access immediately. If not, they
+receive an invite link; signing up through it joins them automatically. Invites
+expire, are single-use, bound to the address they were sent to, and revocable.
+A context always keeps at least one owner.
+
+## What the service is
 
 One FastAPI process exposing:
 
 ```text
 /mcp                         MCP v2 Streamable HTTP (Claude + ChatGPT connectors)
-/v1/...                      REST mirror of the tools (GPT Actions fallback, scripts)
+/v1/...                      REST mirror of the tools + sharing endpoints
 /.well-known/oauth-*         OAuth 2.1 discovery (RFC 8414 / 9728)
 /authorize /token /register  OAuth authorization-code + PKCE + dynamic registration
 /revoke
-/auth/login /auth/consent    Human login + consent pages
+/auth/signup /auth/login     Account creation and sign-in
+/auth/verify /auth/forgot    Email verification and password reset
+/auth/consent                OAuth approval for a connecting client
 /auth/connections            Connected clients + revoke
-/console                     Project view: memories, members, audit, retract
+/invite/{code}               Accept a shared context
+/console                     Your contexts, create, connected clients
+/console/c/{id}              One context: memories, members, sharing, audit
 /health                      Liveness (+ user count)
 /openapi.json                REST schema (servers block from SAC_PUBLIC_URL)
 ```
@@ -25,10 +75,6 @@ One FastAPI process exposing:
 Backed by PostgreSQL on Render / SQLite locally. Identity, membership, private
 vs shared scope, and permission filtering are enforced **before** any memory
 reaches a model.
-
-MCP tools: `sac_project_info`, `sac_sync_context`, `sac_remember_shared`,
-`sac_remember_private`, `sac_recent_changes`, `sac_get_source`, `sac_get_memory`,
-`sac_status`.
 
 ## Environment variables
 
@@ -38,8 +84,12 @@ MCP tools: `sac_project_info`, `sac_sync_context`, `sac_remember_shared`,
 | `SAC_AUTH_MODE` | `auth` for a real deployment (default `dev` — unauthenticated, local only). |
 | `SAC_PUBLIC_URL` | Public https base URL. On Render, `RENDER_EXTERNAL_URL` is used automatically; set this only to override (custom domain). |
 | `SAC_BOOTSTRAP_ADMIN_EMAIL` / `SAC_BOOTSTRAP_ADMIN_PASSWORD` | Creates the first admin user on first boot if the user table is empty. |
-| `SAC_ALLOWED_REDIRECT_HOSTS` | Comma list; OAuth redirect hosts allowed at registration (e.g. `claude.ai,claude.com,chatgpt.com,openai.com`). |
+| `SAC_ALLOWED_REDIRECT_HOSTS` | Comma list; OAuth redirect hosts allowed at registration. Defaults to the known provider hosts — it fails closed, never open. |
 | `SAC_CIMD_ALLOWED_HOSTS` | Comma list; hosts allowed for ChatGPT CIMD document fetch (e.g. `chatgpt.com,openai.com`). CIMD is disabled if unset. |
+| `SAC_REQUIRE_VERIFIED_EMAIL` | `1` (default) blocks unverified accounts from creating contexts or accepting shares. |
+| `SAC_EMAIL_PROVIDER` | `console` (default, logs only) or `resend`. |
+| `RESEND_API_KEY` / `SAC_EMAIL_FROM` | Required when the provider is `resend`. |
+| `SAC_MAX_CONTEXTS_PER_USER` etc. | Quota overrides — see `app/limits.py`. |
 
 ## Deploy to Render
 
@@ -127,17 +177,26 @@ succeeds.
 
 ## Two-account acceptance test
 
-1. In ChatGPT, state a decision ("We'll use Supabase Auth and passkeys"). The
-   agent calls `sac_remember_shared`. Confirm it in `/console` (memory + revision
-   bump + audit row).
-2. In Claude, ask a related task ("implement Windows auth"). It calls
-   `sac_sync_context` and receives the decision with **no copy/paste**; it
-   publishes a constraint.
-3. Back in ChatGPT, the next `sac_sync_context` includes Claude's constraint.
-4. **Private isolation**: write a private memory from one account; confirm the
-   other account never receives it (also covered by `tests/test_permissions.py`).
-5. **Revocation**: revoke the connection in `/auth/connections`; the next call
-   from that client fails with 401 until re-authorized.
+1. **Create and share.** In `/console`, create a context. Open it → **Share this
+   context** → your collaborator's email at **edit**. They receive a link.
+2. **They join.** Opening the link, they sign up (or sign in), verify their
+   email, and land in the context. They connect their AI client.
+3. **A → B.** In ChatGPT, state a decision ("We'll use Supabase Auth and
+   passkeys"). The agent calls `sac_remember_shared`. Confirm it in the console:
+   memory, revision bump, audit row.
+4. **B → A.** In their Claude, ask a related task. It calls `sac_sync_context`,
+   receives the decision with **no copy/paste**, and publishes a constraint.
+   Your next sync in ChatGPT includes it.
+5. **Switching.** Create a second context, `sac_use_context` into it, and confirm
+   the first context's memory does not appear — and that the agent tells you
+   which context it is in.
+6. **View is enforced server-side.** Change their access to **view**; their next
+   `sac_remember_shared` is refused by the server, not by prompt.
+7. **Private isolation.** Write a private memory; confirm the other account never
+   receives it (also covered by `tests/test_permissions.py`).
+8. **Revocation.** Revoke the connection in `/auth/connections`, or the person in
+   the context's member list; their next call fails until re-authorized, and the
+   context disappears from their list.
 
 ## Operational notes
 

@@ -15,6 +15,14 @@ It answers the hypothesis:
 
 > **Can one ChatGPT-side account and one Claude-side account work independently while continuously benefiting from project knowledge produced by the other — with real identity and privacy?**
 
+V2 adds **multiple named shared contexts**: create one, switch between them from
+chat, and share them by email at view / edit / manage access. Twelve MCP tools —
+four to manage which context you're in (`sac_list_contexts`,
+`sac_create_context`, `sac_use_context`, `sac_context_info`) and eight to use
+it. Every response states the active context, and public signup with email
+verification means collaborators can join themselves. Sharing is deliberately
+human-only: an agent can never grant anyone access.
+
 V1 implements:
 
 - **Verified identity** — in-service OAuth 2.1 authorization server (auth-code +

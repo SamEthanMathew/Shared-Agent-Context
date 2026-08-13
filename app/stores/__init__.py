@@ -13,6 +13,7 @@ from ..db import create_sac_engine, metadata
 from ..identity import Principal, RequestIdentity
 from ..auth.store import AuthStore
 from .audit import AuditStore
+from .invites import InviteStore
 from .memories import MemoryStore
 from .projects import ProjectStore
 from .sessions import SessionStore
@@ -28,6 +29,7 @@ class SACStore:
         self.memories = MemoryStore(self.engine, self.projects, self.audit)
         self.snapshots = SnapshotStore(self.engine)
         self.auth = AuthStore(self.engine)
+        self.invites = InviteStore(self.engine)
 
     def init(self) -> None:
         metadata.create_all(self.engine)

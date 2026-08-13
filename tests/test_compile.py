@@ -23,7 +23,10 @@ def test_sections_render(seed):
     seed.store.memories.remember(seed.bob, scope="private", kind="note", summary="Bob private note.")
     sess = _session(seed, seed.bob_user_id, "claude-main")
     text = compile_context(seed.store, seed.bob, sess, "plan work")["context_text"]
-    assert "SAC PROJECT CONTEXT" in text
+    assert "SAC SHARED CONTEXT" in text
+    # the header must name the context and the caller's access, not a bare UUID
+    assert "ACTIVE CONTEXT: Shared Desktop App" in text
+    assert "your access: edit" in text
     assert "CURRENT TASK" in text
     assert "SHARED CONTEXT" in text
     assert "PRIVATE CONTEXT (visible only to you)" in text

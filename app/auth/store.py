@@ -17,6 +17,7 @@ from sqlalchemy.engine import Engine
 from ..db import (
     auth_transactions,
     authorization_codes,
+    email_tokens,
     ensure_aware,
     login_sessions,
     oauth_clients,
@@ -67,18 +68,111 @@ class AuthStore:
                 )
             )
 
+    # A pre-computed hash of a throwaway password. Verifying against it makes
+    # the unknown-email path cost the same as the known-email path, so response
+    # timing can't be used to enumerate accounts.
+    _DUMMY_HASH = hash_password("sac-timing-equaliser")
+
+    MAX_FAILED_LOGINS = 8
+    LOCKOUT = timedelta(minutes=15)
+
     def verify_login(self, email: str, password: str) -> dict[str, Any] | None:
+        """Authenticate, with lockout and constant-ish timing.
+
+        Returns None for every failure mode — unknown email, wrong password,
+        disabled, or locked — so callers cannot distinguish them.
+        """
         email = (email or "").strip().lower()
+        now = utcnow()
         with self.engine.begin() as conn:
             row = conn.execute(select(users).where(users.c.email == email)).first()
-        if not row:
-            return None
-        m = dict(row._mapping)
-        if m.get("disabled_at") is not None:
-            return None
-        if not verify_password(password, m.get("password_hash")):
-            return None
+
+            if not row:
+                verify_password(password, self._DUMMY_HASH)  # equalise timing
+                return None
+
+            m = dict(row._mapping)
+            if m.get("disabled_at") is not None:
+                verify_password(password, self._DUMMY_HASH)
+                return None
+
+            locked_until = ensure_aware(m.get("locked_until"))
+            if locked_until is not None and locked_until > now:
+                verify_password(password, self._DUMMY_HASH)
+                return None
+
+            if not verify_password(password, m.get("password_hash")):
+                failed = int(m.get("failed_login_count") or 0) + 1
+                values: dict[str, Any] = {"failed_login_count": failed}
+                if failed >= self.MAX_FAILED_LOGINS:
+                    values["locked_until"] = now + self.LOCKOUT
+                    values["failed_login_count"] = 0
+                conn.execute(
+                    update(users).where(users.c.id == m["id"]).values(**values)
+                )
+                return None
+
+            conn.execute(
+                update(users)
+                .where(users.c.id == m["id"])
+                .values(failed_login_count=0, locked_until=None, last_login_at=now)
+            )
         return m
+
+    # --- email verification / password reset --------------------------------
+
+    def create_email_token(self, user_id: str, kind: str, ttl: timedelta) -> str:
+        """Mint a single-use token for verification or password reset."""
+        token = secrets.token_urlsafe(32)
+        now = utcnow()
+        with self.engine.begin() as conn:
+            conn.execute(
+                email_tokens.insert().values(
+                    id=str(uuid.uuid4()),
+                    user_id=user_id,
+                    kind=kind,
+                    token_hash=sha256(token),
+                    expires_at=now + ttl,
+                    created_at=now,
+                )
+            )
+        return token
+
+    def consume_email_token(self, token: str, kind: str) -> str | None:
+        """Redeem a token, returning its user id, or None if unusable."""
+        with self.engine.begin() as conn:
+            row = conn.execute(
+                select(email_tokens).where(
+                    email_tokens.c.token_hash == sha256(token),
+                    email_tokens.c.kind == kind,
+                )
+            ).first()
+            if not row:
+                return None
+            m = dict(row._mapping)
+            if m["used_at"] is not None or ensure_aware(m["expires_at"]) <= utcnow():
+                return None
+            conn.execute(
+                update(email_tokens)
+                .where(email_tokens.c.id == m["id"])
+                .values(used_at=utcnow())
+            )
+        return m["user_id"]
+
+    def mark_email_verified(self, user_id: str) -> None:
+        with self.engine.begin() as conn:
+            conn.execute(
+                update(users)
+                .where(users.c.id == user_id)
+                .values(email_verified_at=utcnow())
+            )
+
+    def is_email_verified(self, user_id: str) -> bool:
+        with self.engine.begin() as conn:
+            row = conn.execute(
+                select(users.c.email_verified_at).where(users.c.id == user_id)
+            ).first()
+        return bool(row and row.email_verified_at is not None)
 
     # --- login sessions (control-plane cookie) ------------------------------
 

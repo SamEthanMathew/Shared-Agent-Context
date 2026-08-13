@@ -13,13 +13,15 @@ from fastapi import APIRouter, Request
 
 from ..identity import Principal, RequestIdentity
 from ..runtime import get_store
-from . import impl
+from . import impl, sharing
 from .deps import resolve_principal
 from .schemas import (
+    AccessRequest,
     AddMemberRequest,
     CreateProjectRequest,
     CreateSessionRequest,
     RememberRequest,
+    ShareRequest,
     SyncRequest,
 )
 
@@ -40,8 +42,27 @@ def _identity(request: Request, project_id: str) -> RequestIdentity:
 # --- projects & membership --------------------------------------------------
 
 
+@router.get("/contexts", operation_id="list_contexts")
+def list_contexts(request: Request) -> dict[str, Any]:
+    """Every context available to the caller."""
+    return impl.list_contexts(get_store(), _principal(request))
+
+
+@router.post("/contexts", operation_id="create_context")
+def create_context(payload: CreateProjectRequest, request: Request) -> dict[str, Any]:
+    """Create a context; the caller becomes its owner."""
+    return impl.create_context(
+        get_store(),
+        _principal(request),
+        payload.name,
+        description=payload.description,
+        make_active=False,
+    )
+
+
 @router.post("/projects", operation_id="create_project")
 def create_project(payload: CreateProjectRequest, request: Request) -> dict[str, Any]:
+    """Deprecated alias for POST /v1/contexts."""
     store = get_store()
     principal = _principal(request)
     project = store.projects.create_project(
@@ -79,6 +100,43 @@ def list_members(project_id: str, request: Request) -> dict[str, Any]:
     store = get_store()
     _identity(request, project_id)  # membership gate
     return {"ok": True, "members": store.projects.list_members(project_id)}
+
+
+# --- sharing (human-only; deliberately not exposed as MCP tools) ------------
+
+
+@router.get("/contexts/{context_id}/shares", operation_id="list_shares")
+def list_shares(context_id: str, request: Request) -> dict[str, Any]:
+    return sharing.list_shares(get_store(), _identity(request, context_id))
+
+
+@router.post("/contexts/{context_id}/shares", operation_id="share_context")
+def share_context(
+    context_id: str, payload: ShareRequest, request: Request
+) -> dict[str, Any]:
+    import os
+
+    base = os.getenv("SAC_PUBLIC_URL") or os.getenv("RENDER_EXTERNAL_URL") or ""
+    return sharing.share_context(
+        get_store(), _identity(request, context_id),
+        email=payload.email, access=payload.access, base_url=base,
+    )
+
+
+@router.patch("/contexts/{context_id}/shares/{user_id}", operation_id="change_access")
+def change_access(
+    context_id: str, user_id: str, payload: AccessRequest, request: Request
+) -> dict[str, Any]:
+    return sharing.change_access(
+        get_store(), _identity(request, context_id), user_id, payload.access
+    )
+
+
+@router.delete("/contexts/{context_id}/shares/{user_id}", operation_id="revoke_access")
+def revoke_access(context_id: str, user_id: str, request: Request) -> dict[str, Any]:
+    return sharing.revoke_access(
+        get_store(), _identity(request, context_id), user_id
+    )
 
 
 @router.post("/projects/{project_id}/sessions", operation_id="create_session")

@@ -47,6 +47,10 @@ def seed(tmp_path) -> Seed:
     alice_id = ps.create_user("alice@example.com", "Alice")
     bob_id = ps.create_user("bob@example.com", "Bob")
     carol_id = ps.create_user("carol@example.com", "Carol")
+    # Seeded users stand in for provisioned accounts, so treat them as verified.
+    # The verification gate itself is covered in tests/test_accounts.py.
+    for uid in (alice_id, bob_id, carol_id):
+        store.auth.mark_email_verified(uid)
 
     project = ps.create_project("Shared Desktop App", owner_user_id=alice_id)
     ps.add_membership(project.id, bob_id, role="member")

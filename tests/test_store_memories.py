@@ -30,7 +30,7 @@ def test_write_creates_evidence_and_provenance(seed):
     assert prov["created_by_agent_id"] == seed.alice_conn
     assert prov["source_event_id"] is not None
     # the evidence event is retrievable and carries the content
-    src = seed.store.memories.get_source(seed.project_id, mem.source_event_id)
+    src = seed.store.memories.get_source(seed.project_id, mem.source_event_id, seed.alice_user_id)
     assert src is not None
     assert "Supabase" in src["content"]
     assert src["event_type"] == "explicit_memory_write"
@@ -38,7 +38,7 @@ def test_write_creates_evidence_and_provenance(seed):
 
 def test_write_creates_version_one(seed):
     out = _remember_shared(seed, seed.alice)
-    versions = seed.store.memories.get_versions(out["memory"].id)
+    versions = seed.store.memories.get_versions(out["memory"].id, seed.project_id, seed.alice_user_id)
     assert len(versions) == 1
     assert versions[0]["version"] == 1
     assert versions[0]["status"] == "active"

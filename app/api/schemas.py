@@ -7,12 +7,21 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from ..models import MemoryKind, Scope, Sensitivity
+from ..models import AccessLevel, MemoryKind, Scope, Sensitivity
 
 
 class CreateProjectRequest(BaseModel):
     name: str = Field(..., min_length=1)
     description: str = ""
+
+
+class ShareRequest(BaseModel):
+    email: str = Field(..., min_length=3)
+    access: AccessLevel = "edit"
+
+
+class AccessRequest(BaseModel):
+    access: AccessLevel
 
 
 class AddMemberRequest(BaseModel):

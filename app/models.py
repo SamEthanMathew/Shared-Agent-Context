@@ -74,6 +74,22 @@ ROLES: frozenset[str] = frozenset({"owner", "admin", "member", "viewer"})
 Role = Literal["owner", "admin", "member", "viewer"]
 # Roles permitted to write project memory (viewer is read-only).
 WRITER_ROLES: frozenset[str] = frozenset({"owner", "admin", "member"})
+# Roles permitted to share a context and change other members' access.
+SHARER_ROLES: frozenset[str] = frozenset({"owner", "admin"})
+
+# What users see when sharing, mapped onto the roles the engine enforces.
+AccessLevel = Literal["view", "edit", "manage"]
+ACCESS_TO_ROLE: dict[str, str] = {
+    "view": "viewer",
+    "edit": "member",
+    "manage": "admin",
+}
+ROLE_TO_ACCESS: dict[str, str] = {
+    "viewer": "view",
+    "member": "edit",
+    "admin": "manage",
+    "owner": "owner",
+}
 
 AUTHORITIES: frozenset[str] = frozenset({"owner", "approved", "member", "agent"})
 
@@ -203,11 +219,15 @@ class EvidenceRecord:
 
 @dataclass
 class ProjectRecord:
+    """A shared context. Called a "context" in the user-facing surfaces."""
+
     id: str
     name: str
     description: str
     owner_user_id: str
     context_revision: int
+    slug: str = ""
     settings: dict[str, Any] = field(default_factory=dict)
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    archived_at: datetime | None = None
