@@ -50,18 +50,41 @@ def _too_many(target: str) -> RedirectResponse:
     )
 
 
-def _page(title: str, body: str) -> str:
+_STYLE = """
+body{font-family:system-ui,sans-serif;margin:3rem auto;padding:0 1rem;color:#111}
+h1{font-size:1.25rem} h2{font-size:1rem;margin-top:1.75rem}
+.card{border:1px solid #ddd;border-radius:12px;padding:1.25rem}
+input,select{width:100%;padding:.55rem;margin:.35rem 0 .8rem;border:1px solid #ccc;
+  border-radius:8px;box-sizing:border-box;font:inherit}
+button{padding:.55rem 1rem;border:0;border-radius:8px;background:#111;color:#fff;cursor:pointer;font:inherit}
+button.secondary{background:#eee;color:#111}
+ul{padding-left:1.1rem} .muted{color:#666;font-size:.9rem}
+form.inline{display:inline}
+table{width:100%;border-collapse:collapse;margin:.5rem 0 1rem}
+th,td{text-align:left;padding:.4rem .5rem;border-bottom:1px solid #eee;vertical-align:top}
+th{font-size:.8rem;text-transform:uppercase;letter-spacing:.03em;color:#666}
+code{background:#f3f3f3;padding:.1rem .3rem;border-radius:4px}
+.notice{background:#fff8e1;border:1px solid #f0e0a0;padding:.6rem .8rem;border-radius:8px}
+a{color:#0b57d0}
+"""
+
+
+def _shell(title: str, body: str, max_width: str) -> str:
     return f"""<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{html.escape(title)}</title>
-<style>
-body{{font-family:system-ui,sans-serif;max-width:26rem;margin:3rem auto;padding:0 1rem;color:#111}}
-h1{{font-size:1.25rem}} .card{{border:1px solid #ddd;border-radius:12px;padding:1.25rem}}
-input{{width:100%;padding:.55rem;margin:.35rem 0 .8rem;border:1px solid #ccc;border-radius:8px;box-sizing:border-box}}
-button{{padding:.55rem 1rem;border:0;border-radius:8px;background:#111;color:#fff;cursor:pointer}}
-button.secondary{{background:#eee;color:#111}} ul{{padding-left:1.1rem}} .muted{{color:#666;font-size:.9rem}}
-form.inline{{display:inline}}
-</style></head><body><div class="card">{body}</div></body></html>"""
+<style>{_STYLE}body{{max-width:{max_width}}}</style>
+</head><body><div class="card">{body}</div></body></html>"""
+
+
+def _page(title: str, body: str) -> str:
+    """Narrow shell for forms (sign-in, consent, invites)."""
+    return _shell(title, body, "26rem")
+
+
+def _wide_page(title: str, body: str) -> str:
+    """Wider shell for the console, which renders tables."""
+    return _shell(title, body, "56rem")
 
 
 def _current_user(request: Request) -> str | None:
