@@ -17,6 +17,8 @@ from .auth.web import router as auth_router
 from .control import router as console_router
 from .errors import ConflictError, ForbiddenError, NotFoundError, SACError, ValidationError
 from .runtime import get_store
+from .api.billing import router as billing_router
+from .api.billing import v1 as billing_v1_router
 from .webapp import router as webapp_router
 
 MCP_INSTRUCTIONS = """
@@ -168,6 +170,10 @@ app = FastAPI(
 )
 
 app.include_router(v1_router)
+app.include_router(billing_v1_router)
+# The Stripe webhook is authenticated by signature, not by session or
+# bearer token, so it sits outside /v1 and its middleware.
+app.include_router(billing_router)
 app.include_router(auth_router)
 app.include_router(console_router)
 # The web app, before the root MCP mount which is a catch-all.

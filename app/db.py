@@ -196,6 +196,8 @@ memberships = Table(
     CheckConstraint("source IN ('direct','org')", name="ck_membership_source"),
 )
 
+# An organisation is also the billing workspace: one organisation, one Stripe
+# customer, one subscription whose quantity is its billable seat count.
 organisations = Table(
     "organisations",
     metadata,
@@ -205,6 +207,75 @@ organisations = Table(
     Column("created_by_user_id", String(36), ForeignKey("users.id"), nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("updated_at", DateTime(timezone=True), nullable=False),
+    # --- billing ------------------------------------------------------------
+    # `plan` is the entitlement the application enforces. It is deliberately a
+    # local column rather than something read from Stripe per request: an outage
+    # at Stripe must not decide whether a customer can use what they paid for.
+    # Webhooks move it; nothing else does.
+    Column("plan", String(16), nullable=False, default="free"),
+    Column("stripe_customer_id", String(64), nullable=True, unique=True),
+    Column("stripe_subscription_id", String(64), nullable=True, unique=True),
+    Column("stripe_price_id", String(64), nullable=True),
+    Column("billing_interval", String(8), nullable=True),  # month | year
+    # What we last told Stripe to charge for. The authoritative seat count is
+    # always recomputed from org_members; this records what is currently billed
+    # so a drift is visible rather than assumed.
+    Column("billable_seats", Integer, nullable=False, default=0),
+    # Mirrors Stripe's subscription status verbatim (active, past_due,
+    # incomplete, canceled, ...) so support questions can be answered without
+    # opening the dashboard.
+    Column("subscription_status", String(32), nullable=True),
+    Column("current_period_end", DateTime(timezone=True), nullable=True),
+    Column("cancel_at_period_end", Integer, nullable=False, default=0),
+    # Set when a payment fails; cleared when one succeeds. Service continues
+    # until the grace period expires — losing access the instant a card expires
+    # would be a worse failure than carrying the cost of a few more days.
+    Column("payment_failed_at", DateTime(timezone=True), nullable=True),
+    CheckConstraint("plan IN ('free','pro','enterprise')", name="ck_org_plan"),
+    Index("ix_orgs_stripe_customer", "stripe_customer_id"),
+)
+
+# Every Stripe event we have processed. The unique constraint on the event id is
+# the idempotency mechanism: Stripe retries deliveries and can send duplicates,
+# so "have we seen this before" has to be a database question, not a hope.
+billing_events = Table(
+    "billing_events",
+    metadata,
+    Column("id", String(36), primary_key=True),
+    Column("stripe_event_id", String(64), nullable=False, unique=True),
+    Column("org_id", String(36), nullable=True),
+    Column("event_type", String(64), nullable=False),
+    Column("payload", JSON, nullable=False, default=dict),
+    Column("received_at", DateTime(timezone=True), nullable=False),
+    Column("processed_at", DateTime(timezone=True), nullable=True),
+    Column("error", Text, nullable=True),
+    Index("ix_billing_events_org", "org_id"),
+)
+
+# Internal cost accounting, deliberately separate from anything Stripe bills.
+# Seats are what customers pay for; this is what serving them actually costs, so
+# that a future decision about metered pricing is made from measurements rather
+# than from guesses. One row per workspace per UTC day.
+usage_daily = Table(
+    "usage_daily",
+    metadata,
+    Column("id", String(36), primary_key=True),
+    # Nullable: personal (org-less) usage is still worth costing.
+    Column("org_id", String(36), nullable=True),
+    Column("user_id", String(36), nullable=True),
+    Column("day", String(10), nullable=False),  # YYYY-MM-DD, UTC
+    Column("context_syncs", Integer, nullable=False, default=0),
+    Column("context_writes", Integer, nullable=False, default=0),
+    Column("context_retrievals", Integer, nullable=False, default=0),
+    Column("embedding_tokens", Integer, nullable=False, default=0),
+    Column("llm_input_tokens", Integer, nullable=False, default=0),
+    Column("llm_output_tokens", Integer, nullable=False, default=0),
+    Column("storage_bytes", Integer, nullable=False, default=0),
+    Column("estimated_llm_cost", Float, nullable=False, default=0.0),
+    Column("estimated_storage_cost", Float, nullable=False, default=0.0),
+    Column("estimated_compute_cost", Float, nullable=False, default=0.0),
+    UniqueConstraint("org_id", "user_id", "day", name="uq_usage_scope_day"),
+    Index("ix_usage_day", "day"),
 )
 
 org_members = Table(

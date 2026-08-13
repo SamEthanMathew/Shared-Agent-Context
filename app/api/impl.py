@@ -43,6 +43,12 @@ def create_context(
     throwaway accounts creating contexts in bulk.
     """
     require_verified(store, principal.user_id, "create a context")
+    # Plan entitlement. Personal (org-less) use is Free, so this is where a
+    # workspace hits its context ceiling. It refuses an *addition* only —
+    # nothing existing is touched.
+    from ..billing.service import check_can_add_context
+
+    check_can_add_context(store, None, principal.user_id)
     enforce_quota(
         store,
         len(store.projects.list_user_contexts(principal.user_id)),

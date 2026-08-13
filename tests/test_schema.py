@@ -37,6 +37,8 @@ def test_create_all_is_idempotent(tmp_path):
         "sso_identities",
         # organisations above contexts
         "organisations", "org_members",
+        # billing
+        "billing_events", "usage_daily",
     }
     assert expected <= names
     assert set(metadata.tables) == expected

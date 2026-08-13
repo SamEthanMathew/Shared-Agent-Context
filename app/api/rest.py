@@ -444,7 +444,13 @@ def add_org_member(
         raise NotFoundError(
             "no verified account for that email; ask them to sign up and verify first"
         )
+    # Free workspaces are capped; Pro is billed per seat, so growing the
+    # workspace grows the subscription (prorated — they have the seat now).
+    from ..billing.service import check_can_add_member, sync_seats
+
+    check_can_add_member(store, org_id)
     store.orgs.add_member(org_id, user["id"], payload.org_role)
+    sync_seats(store, org_id, growing=True)
     store.audit.emit(
         "org.member_add", "organisation", org_id, actor_user_id=principal.user_id,
         meta={"email": payload.email, "org_role": payload.org_role},
@@ -458,6 +464,12 @@ def remove_org_member(org_id: str, user_id: str, request: Request) -> dict[str, 
     principal = _principal(request)
     store.orgs.require_org_admin(org_id, principal.user_id)
     store.orgs.remove_member(org_id, user_id)
+    # Access ended immediately above. The seat is already paid for through this
+    # period, so the smaller quantity takes effect at renewal rather than being
+    # clawed back mid-cycle.
+    from ..billing.service import sync_seats
+
+    sync_seats(store, org_id, growing=False)
     store.audit.emit(
         "org.member_remove", "organisation", org_id,
         actor_user_id=principal.user_id, meta={"user_id": user_id},

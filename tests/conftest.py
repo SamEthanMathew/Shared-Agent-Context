@@ -38,6 +38,58 @@ def _principal(user_id: str, conn_id: str, label: str) -> Principal:
     )
 
 
+@pytest.fixture(autouse=True)
+def _no_plan_limits(monkeypatch):
+    """Free-plan limits are off unless a test is specifically about them.
+
+    Most of this suite exercises context mechanics — switching, sharing,
+    isolation — which are orthogonal to what a plan permits. Leaving the Free
+    caps on would make hundreds of unrelated tests fail for a commercial reason
+    and quietly turn them into billing tests.
+
+    Enforcement at the real call sites is covered explicitly in
+    tests/test_billing.py, which sets these back.
+    """
+    for name in (
+        "SAC_FREE_MAX_CONTEXTS",
+        "SAC_FREE_MAX_MEMBERS",
+        "SAC_FREE_MAX_AGENTS",
+        "SAC_FREE_MAX_MEMORIES",
+        "SAC_FREE_MAX_SYNCS",
+    ):
+        monkeypatch.setenv(name, "0")  # 0 means unlimited
+    _reload_plans()
+    yield
+    monkeypatch.undo()
+    _reload_plans()
+
+
+def _reload_plans() -> None:
+    """Plan limits are read at import time, so re-read them after an env change."""
+    import importlib
+
+    import app.billing.plans as plans
+
+    importlib.reload(plans)
+
+
+@pytest.fixture
+def free_plan_limits(monkeypatch):
+    """Opt back in to the real Free caps, for tests that are about them."""
+    for name, value in (
+        ("SAC_FREE_MAX_CONTEXTS", "1"),
+        ("SAC_FREE_MAX_MEMBERS", "3"),
+        ("SAC_FREE_MAX_AGENTS", "3"),
+        ("SAC_FREE_MAX_MEMORIES", "1000"),
+        ("SAC_FREE_MAX_SYNCS", "500"),
+    ):
+        monkeypatch.setenv(name, value)
+    _reload_plans()
+    yield
+    monkeypatch.undo()
+    _reload_plans()
+
+
 @pytest.fixture
 def seed(tmp_path) -> Seed:
     store = SACStore(f"sqlite:///{tmp_path / 'sac_test.db'}")
