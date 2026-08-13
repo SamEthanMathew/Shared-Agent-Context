@@ -120,6 +120,27 @@ mcp_app = mcp.streamable_http_app(
 )
 
 
+def cap_thread_pool() -> int:
+    """Match the worker-thread limit to the database connection pool.
+
+    Every handler and MCP tool here is synchronous, so each runs in this thread
+    pool and holds a connection for as long as its query takes. Left at anyio's
+    default of ~40 it exceeds the connection pool, and the surplus threads simply
+    queue on checkout: the process accepts more concurrency than the database can
+    serve, which surfaces as latency rather than as an error anyone would notice.
+
+    Must be called from inside the event loop, which is why it lives in the
+    lifespan rather than at import time. Returns the cap for logging and tests.
+    """
+    import anyio.to_thread
+
+    from .db import pool_capacity
+
+    capacity = pool_capacity()
+    anyio.to_thread.current_default_thread_limiter().total_tokens = capacity
+    return capacity
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     store = get_store()
@@ -127,6 +148,9 @@ async def lifespan(app: FastAPI):
     from .auth.bootstrap import bootstrap_admin
 
     bootstrap_admin(store)
+
+    cap_thread_pool()
+
     async with mcp.session_manager.run():
         yield
 

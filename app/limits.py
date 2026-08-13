@@ -28,6 +28,13 @@ def _int_env(name: str, default: int) -> int:
 MAX_CONTEXTS_PER_USER = _int_env("SAC_MAX_CONTEXTS_PER_USER", 50)
 MAX_MEMBERS_PER_CONTEXT = _int_env("SAC_MAX_MEMBERS_PER_CONTEXT", 50)
 MAX_MEMORIES_PER_CONTEXT = _int_env("SAC_MAX_MEMORIES_PER_CONTEXT", 50_000)
+
+# How many live memories one sync may consider before ranking. A context is
+# allowed to hold far more (MAX_MEMORIES_PER_CONTEXT), so past this point a sync
+# ranks the most recent slice rather than everything — and says so, rather than
+# letting recall quietly degrade.
+COMPILE_CANDIDATE_LIMIT = _int_env("SAC_COMPILE_CANDIDATE_LIMIT", 750)
+
 MAX_SUMMARY_CHARS = _int_env("SAC_MAX_SUMMARY_CHARS", 2_000)
 MAX_DETAILS_CHARS = _int_env("SAC_MAX_DETAILS_CHARS", 20_000)
 MAX_TAGS = _int_env("SAC_MAX_TAGS", 25)

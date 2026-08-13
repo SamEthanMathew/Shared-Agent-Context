@@ -24,6 +24,7 @@ from ..db import (
 from ..errors import ForbiddenError, NotFoundError, ValidationError
 from ..identity import RequestIdentity
 from ..limits import (
+    COMPILE_CANDIDATE_LIMIT,
     MAX_DETAILS_CHARS,
     MAX_MEMORIES_PER_CONTEXT,
     MAX_SUMMARY_CHARS,
@@ -444,8 +445,9 @@ class MemoryStore:
         return [_row_to_memory(r._mapping) for r in rows]
 
     def compile_candidates(
-        self, project_id: str, user_id: str, candidate_limit: int = 750
+        self, project_id: str, user_id: str, candidate_limit: int | None = None
     ) -> list[MemoryRecord]:
+        cap = COMPILE_CANDIDATE_LIMIT if candidate_limit is None else int(candidate_limit)
         now = utcnow()
         with self.engine.begin() as conn:
             rows = conn.execute(
@@ -459,7 +461,7 @@ class MemoryStore:
                     ),
                 )
                 .order_by(memories.c.revision.desc())
-                .limit(max(1, min(int(candidate_limit), 2000)))
+                .limit(max(1, min(cap, 2000)))
             ).all()
         return [_row_to_memory(r._mapping) for r in rows]
 
@@ -472,7 +474,13 @@ class MemoryStore:
         newest = max(m.revision for m in candidates)
         scored: list[tuple[float, MemoryRecord]] = []
         for m in candidates:
-            searchable = " ".join([m.summary, m.details, " ".join(m.tags), m.kind])
+            # Deliberately excludes `details`. It is capped at 20,000 characters,
+            # and ranking up to 750 candidates meant regex-tokenising as much as
+            # 15 MB of text per sync — the dominant cost of a turn, on a small
+            # instance. A long body also dilutes the score it feeds: overlap
+            # against a wall of prose is mostly coincidence, while the summary,
+            # tags and kind are what the author wrote to be found by.
+            searchable = " ".join([m.summary, " ".join(m.tags), m.kind])
             mem_tokens = tokenize(searchable)
             overlap = len(task_tokens & mem_tokens)
             coverage = overlap / max(1, len(task_tokens))

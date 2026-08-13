@@ -52,16 +52,60 @@ def normalize_database_url(url: str) -> str:
     return url
 
 
+# How many database connections one process may hold. Every request handler
+# here is synchronous, so it runs in Starlette's thread pool and holds a
+# connection for the length of its query. If the thread pool is larger than the
+# connection pool, the surplus threads simply queue on connection checkout —
+# work arrives faster than it can be served, and latency climbs while the
+# database sits idle. app/main.py caps the thread pool to match this number, and
+# the two must be read together.
+#
+# The ceiling is the Postgres server's own max_connections, shared across every
+# web instance plus the retention job. Confirm it for the deployed plan before
+# raising this: pool + overflow, times instances, has to fit underneath.
+DEFAULT_POOL_SIZE = 10
+DEFAULT_MAX_OVERFLOW = 10
+
+
+def pool_capacity() -> int:
+    """Total connections one process may open. Also caps the thread pool."""
+    return _int_env("SAC_DB_POOL_SIZE", DEFAULT_POOL_SIZE) + _int_env(
+        "SAC_DB_MAX_OVERFLOW", DEFAULT_MAX_OVERFLOW
+    )
+
+
+def _int_env(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+
+
 def create_sac_engine(database_url: str | None = None) -> Engine:
     url = normalize_database_url(
         database_url or os.getenv("DATABASE_URL") or DEFAULT_SQLITE_URL
     )
-    connect_args = {"check_same_thread": False} if url.startswith("sqlite") else {}
+    if url.startswith("sqlite"):
+        # SQLite serialises writers anyway and has no server to exhaust, so pool
+        # tuning is meaningless here. check_same_thread is needed because the
+        # thread pool hands connections between threads.
+        return create_engine(
+            url,
+            future=True,
+            pool_pre_ping=True,
+            connect_args={"check_same_thread": False},
+        )
     return create_engine(
         url,
         future=True,
         pool_pre_ping=True,
-        connect_args=connect_args,
+        pool_size=_int_env("SAC_DB_POOL_SIZE", DEFAULT_POOL_SIZE),
+        max_overflow=_int_env("SAC_DB_MAX_OVERFLOW", DEFAULT_MAX_OVERFLOW),
+        # Render closes idle connections; recycling below that keeps us from
+        # handing a dead one to a request.
+        pool_recycle=_int_env("SAC_DB_POOL_RECYCLE", 280),
+        # Fail with a clear error rather than hanging forever when saturated.
+        pool_timeout=_int_env("SAC_DB_POOL_TIMEOUT", 30),
     )
 
 
@@ -240,6 +284,10 @@ memories = Table(
     Column("updated_at", DateTime(timezone=True), nullable=False),
     UniqueConstraint("project_id", "revision", name="uq_project_revision"),
     Index("ix_memories_compile", "project_id", "status", "scope", "owner_user_id"),
+    # compile_candidates sorts by revision to take the newest slice. Without
+    # revision in the index, the filter is indexed but the sort is not, so every
+    # matching row is read and then sorted.
+    Index("ix_memories_compile_rev", "project_id", "status", "revision"),
     CheckConstraint("scope IN ('private','shared')", name="ck_memories_scope"),
     CheckConstraint(
         "(scope = 'shared' AND owner_user_id IS NULL) "
@@ -305,6 +353,9 @@ context_snapshots = Table(
     Column("compiler_policy", String(64), nullable=False, default="lexical_v1"),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Index("ix_snapshots_project_created", "project_id", "created_at"),
+    # One person's own sync records. The project-wide index above meant
+    # scanning every member's records to find one member's.
+    Index("ix_snapshots_user", "project_id", "user_id", "created_at"),
     Index("ix_snapshots_session", "session_id"),
 )
 
@@ -360,6 +411,7 @@ auth_transactions = Table(
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("expires_at", DateTime(timezone=True), nullable=False),
     Column("completed_at", DateTime(timezone=True), nullable=True),
+    Index("ix_txn_expires", "expires_at"),
 )
 
 authorization_codes = Table(
@@ -378,6 +430,7 @@ authorization_codes = Table(
     Column("expires_at", DateTime(timezone=True), nullable=False),
     Column("used_at", DateTime(timezone=True), nullable=True),
     Column("created_at", DateTime(timezone=True), nullable=False),
+    Index("ix_codes_expires", "expires_at"),
 )
 
 oauth_tokens = Table(
@@ -399,6 +452,7 @@ oauth_tokens = Table(
     Column("revoked_at", DateTime(timezone=True), nullable=True),
     Index("ix_tokens_family", "family_id"),
     Index("ix_tokens_connection", "agent_connection_id"),
+    Index("ix_tokens_expires", "expires_at"),
 )
 
 login_sessions = Table(
@@ -409,6 +463,7 @@ login_sessions = Table(
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("expires_at", DateTime(timezone=True), nullable=False),
     Column("revoked_at", DateTime(timezone=True), nullable=True),
+    Index("ix_login_sessions_expires", "expires_at"),
 )
 
 # --- Sharing, account lifecycle, abuse control ------------------------------
@@ -471,6 +526,7 @@ email_tokens = Table(
     Column("created_at", DateTime(timezone=True), nullable=False),
     Index("ix_email_tokens_user", "user_id"),
     CheckConstraint("kind IN ('verify','reset')", name="ck_email_token_kind"),
+    Index("ix_email_tokens_expires", "expires_at"),
 )
 
 # Fixed-window counters for rate limiting and quotas. A table is sufficient at

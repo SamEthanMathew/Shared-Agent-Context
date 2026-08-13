@@ -16,6 +16,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from .identity import RequestIdentity
+from .limits import COMPILE_CANDIDATE_LIMIT
 from .models import MemoryRecord, SessionRecord
 
 if TYPE_CHECKING:  # avoid a runtime import cycle with the store package
@@ -70,6 +71,11 @@ def compile_context(
         project_id, user_id, session.id, previous_revision, limit=12
     )
     candidates = store.memories.compile_candidates(project_id, user_id)
+    # A full page of candidates means the context holds more live memory than one
+    # sync can consider, so ranking saw the most recent slice rather than
+    # everything. Say so: otherwise "my agent didn't know X" looks like a bug
+    # instead of a ceiling, and the ceiling is the thing worth acting on.
+    candidates_capped = len(candidates) >= COMPILE_CANDIDATE_LIMIT
     ranked = store.memories.rank(candidates, task, limit=50)
     conflicts = store.memories.unresolved_conflicts(project_id, user_id, limit=5)
     counts = store.memories.count_memories(project_id, user_id)
@@ -168,6 +174,15 @@ def compile_context(
             {"reason": "not_visible_private_other", "count": counts["private_others"]}
         )
 
+    # And honest about the ceiling: this context holds more live memory than one
+    # sync ranks, so anything older than the slice considered was never a
+    # candidate. Recorded in the manifest as well as returned, so the sync
+    # records show when it started happening.
+    if candidates_capped:
+        excluded.append(
+            {"reason": "beyond_candidate_window", "count": COMPILE_CANDIDATE_LIMIT}
+        )
+
     lines.extend(footer)
     context_text = "\n".join(lines)
     token_estimate = max(1, len(context_text) // CHARS_PER_TOKEN)
@@ -205,4 +220,6 @@ def compile_context(
         "included_memory_ids": [i["memory_id"] for i in included],
         "new_change_count": len(changes),
         "context_text": context_text,
+        # True when the context outgrew what one sync can rank.
+        "candidates_truncated": candidates_capped,
     }
