@@ -53,6 +53,19 @@ def require_verified(store, user_id: str, action: str) -> None:
 # --- rate limiting ----------------------------------------------------------
 
 
+def client_ip(request) -> str:
+    """The caller's address, trusting Render's proxy header when present.
+
+    Shared by the HTML forms and the middleware in app/main.py so both bucket
+    the same caller identically — two implementations would drift, and a
+    mismatched key silently halves the effective limit.
+    """
+    forwarded = request.headers.get("x-forwarded-for", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
 class RateLimiter:
     """Fixed-window counter keyed by an arbitrary string."""
 

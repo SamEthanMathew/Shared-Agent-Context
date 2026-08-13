@@ -386,13 +386,22 @@ class ProjectStore:
                 )
                 .order_by(projects.c.updated_at.desc())
             ).all()
-            counts = {
-                r[0]: int(r[1])
-                for r in conn.execute(
-                    select(memberships.c.project_id, func.count())
-                    .group_by(memberships.c.project_id)
-                ).all()
-            }
+            # Count members only for the contexts this caller can see. Without
+            # the WHERE, this aggregated *every* membership row in the database
+            # and built a dict of every project in it — on the endpoint the web
+            # app hits on each page load. It returned the right answer at a cost
+            # that grew with total tenants rather than with the caller.
+            counts: dict[str, int] = {}
+            project_ids = [r.id for r in rows]
+            if project_ids:
+                counts = {
+                    r[0]: int(r[1])
+                    for r in conn.execute(
+                        select(memberships.c.project_id, func.count())
+                        .where(memberships.c.project_id.in_(project_ids))
+                        .group_by(memberships.c.project_id)
+                    ).all()
+                }
         return [
             {
                 "id": r.id,

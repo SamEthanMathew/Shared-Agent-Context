@@ -11,7 +11,7 @@ import re
 import uuid
 from typing import Any
 
-from sqlalchemy import and_, or_, select, update
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.engine import Connection, Engine
 
 from ..db import (
@@ -29,6 +29,7 @@ from ..limits import (
     MAX_SUMMARY_CHARS,
     MAX_TAG_CHARS,
     MAX_TAGS,
+    enforce_quota,
 )
 from ..models import (
     AUTHORITY_WEIGHT,
@@ -168,6 +169,7 @@ class MemoryStore:
             )
 
         identity.require_writer()
+        self._enforce_context_quota(identity)
 
         owner_user_id = identity.user_id if scope == "private" else None
         importance = max(0.0, min(float(importance), 1.0))
@@ -642,6 +644,27 @@ class MemoryStore:
                 )
             ).first()
         return dict(row._mapping) if row else None
+
+    def _enforce_context_quota(self, identity: RequestIdentity) -> None:
+        """Refuse a write once a context has hit its live-memory ceiling.
+
+        ``MAX_MEMORIES_PER_CONTEXT`` was imported here but never applied, so a
+        single context could grow until it exhausted the database. The count is
+        of *live* memory across both scopes, so retracting frees room and a
+        private write is not a way around the cap.
+        """
+        with self.engine.begin() as conn:
+            live = conn.execute(
+                select(func.count())
+                .select_from(memories)
+                .where(
+                    memories.c.project_id == identity.project_id,
+                    memories.c.status == "active",
+                )
+            ).scalar_one()
+        enforce_quota(
+            self, int(live), MAX_MEMORIES_PER_CONTEXT, "memories per context"
+        )
 
     def count_memories(self, project_id: str, user_id: str) -> dict[str, int]:
         from sqlalchemy import func

@@ -292,6 +292,52 @@ async def api_auth(request: Request, call_next):
 
 
 @app.middleware("http")
+async def rate_limits(request: Request, call_next):
+    """Meter the endpoints that anyone can reach, and per-connection tool use.
+
+    `/register` and `/token` are served by the MCP SDK's mount, so they cannot
+    carry a decorator — and both are reachable without credentials. Every
+    dynamic client registration writes a permanent `oauth_clients` row, so
+    leaving it unmetered means an anonymous caller can grow that table without
+    limit. The budgets have been sitting unused in `LIMITS` since V2.
+
+    Tool calls are metered per connection rather than per IP: several people
+    behind one office NAT are not one abuser, while one runaway agent loop is.
+    An unverified token still gets its own bucket, which also caps guessing.
+    """
+    import hashlib
+
+    from .limits import LIMITS, RateLimiter, client_ip
+
+    path = request.url.path
+    bucket = key = ""
+
+    if request.method == "POST" and path in ("/register", "/token"):
+        bucket = "register" if path == "/register" else "token"
+        key = f"{bucket}:{client_ip(request)}"
+    elif path.startswith("/mcp") or path.startswith("/v1"):
+        header = request.headers.get("authorization", "")
+        if header.lower().startswith("bearer "):
+            token = header[7:].strip()
+            # Hash rather than verify: this runs before authentication, and the
+            # raw token must not become a database key.
+            fingerprint = hashlib.sha256(token.encode()).hexdigest()[:32]
+            bucket = "tool_call"
+            key = f"tool_call:{fingerprint}"
+
+    if bucket:
+        limit, window = LIMITS[bucket]
+        if not RateLimiter(get_store().engine).hit(key, limit, window):
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "rate limit exceeded; slow down"},
+                headers={"Retry-After": str(window)},
+            )
+
+    return await call_next(request)
+
+
+@app.middleware("http")
 async def security_headers(request: Request, call_next):
     """Baseline hardening headers; authenticated HTML is never cached."""
     response = await call_next(request)
@@ -329,13 +375,19 @@ async def _sac_error_handler(request: Request, exc: SACError) -> JSONResponse:
 
 @app.get("/health", include_in_schema=False)
 def health() -> dict[str, Any]:
+    """Liveness: is the process up and the database reachable.
+
+    Deliberately does no counting. This used to report `users`, which meant a
+    `COUNT(*)` over a growing table on an endpoint Render polls continuously —
+    liveness should not get slower as the product succeeds. The user count lives
+    in the console, where someone actually asked for it.
+    """
+    from sqlalchemy import text
+
     store = get_store()
-    return {
-        "ok": True,
-        "mode": "v2_multi_context",
-        "auth": AUTH_ENABLED,
-        "users": store.projects.count_users(),
-    }
+    with store.engine.connect() as conn:
+        conn.execute(text("SELECT 1"))
+    return {"ok": True, "mode": "v2_multi_context", "auth": AUTH_ENABLED}
 
 
 # The MCP protocol endpoint is exactly /mcp; the root mount also lets the SDK

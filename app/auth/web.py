@@ -28,19 +28,12 @@ def _secure(request: Request) -> bool:
     return request.url.scheme == "https"
 
 
-def _client_ip(request: Request) -> str:
-    fwd = request.headers.get("x-forwarded-for", "")
-    if fwd:
-        return fwd.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
-
-
 def _rate_ok(request: Request, bucket: str, extra: str = "") -> bool:
     """Fixed-window rate limit, keyed by bucket + client IP (+ optional field)."""
-    from ..limits import LIMITS, RateLimiter
+    from ..limits import LIMITS, RateLimiter, client_ip
 
     limit, window = LIMITS.get(bucket, (30, 300))
-    key = f"{bucket}:{_client_ip(request)}:{extra}".lower()
+    key = f"{bucket}:{client_ip(request)}:{extra}".lower()
     return RateLimiter(get_store().engine).hit(key, limit, window)
 
 
