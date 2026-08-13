@@ -4,5 +4,8 @@
 # files are stored byte-for-byte.
 app/static/app/** -text
 
-# Same reasoning for the lockfile the CI build depends on.
+# The web *sources* must also check out identically everywhere, or a Windows
+# working copy builds from CRLF while CI builds from LF and the diff above fails
+# for no real reason. LF for everything the bundler reads.
+web/** text eol=lf
 web/package-lock.json text eol=lf
