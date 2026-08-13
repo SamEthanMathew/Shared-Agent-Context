@@ -950,3 +950,404 @@ button { font: inherit; color: inherit; }
   [data-theme="light"] { --osmos-border: rgba(11, 17, 27, .45); }
   .t-body, .t-lead, .t-small { color: var(--osmos-text); }
 }
+
+/* ==========================================================================
+   16. Motion layer
+
+   Rule kept from the original build: motion explains, it does not decorate.
+   Reveals are one-time, short, and small (12px), so the page settles rather
+   than performs. Everything here is gated on [data-js] so a JS failure leaves
+   content visible rather than blank, and on prefers-reduced-motion.
+   ========================================================================== */
+[data-js] [data-reveal] {
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 560ms var(--ease), transform 560ms var(--ease);
+  transition-delay: calc(var(--i, 0) * 60ms);
+}
+[data-js] [data-reveal].is-in { opacity: 1; transform: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-js] [data-reveal] { opacity: 1; transform: none; transition: none; }
+}
+
+/* Ambient hero wash. The one place colour appears without knowledge moving —
+   blurred, behind the content, and low enough that text contrast is untouched. */
+/* overflow:clip, not hidden — the wash below bleeds past the section edge by
+   design, and `hidden` would make the hero a scroll container (which steals
+   focus scrolling) as well as widening the document. */
+.hero { position: relative; isolation: isolate; overflow: clip; }
+.hero::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -30% -5% auto -5%;
+  height: 620px;
+  background:
+    radial-gradient(58% 58% at 22% 32%, color-mix(in srgb, var(--flow-1) 26%, transparent), transparent 70%),
+    radial-gradient(48% 48% at 78% 18%, color-mix(in srgb, var(--flow-4) 22%, transparent), transparent 72%),
+    radial-gradient(46% 46% at 55% 58%, color-mix(in srgb, var(--flow-5) 14%, transparent), transparent 74%);
+  filter: blur(36px);
+  opacity: .55;
+  animation: drift 26s var(--ease) infinite alternate;
+  pointer-events: none;
+}
+[data-theme="light"] .hero::before { opacity: .3; }
+@keyframes drift {
+  from { transform: translate3d(-2%, 0, 0) scale(1); }
+  to   { transform: translate3d(3%, 2%, 0) scale(1.06); }
+}
+@media (prefers-reduced-motion: reduce) { .hero::before { animation: none; } }
+
+/* Cards lift slightly on hover — enough to read as a surface, never enough to
+   move the layout. */
+.card {
+  transition: transform var(--t-standard) var(--ease),
+              border-color var(--t-standard) var(--ease),
+              background var(--t-standard) var(--ease);
+}
+@media (hover: hover) {
+  .card:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--osmos-text) 22%, transparent);
+  }
+}
+
+/* Nav scrollspy: the underline marks where you are, not where you could go. */
+.nav__link { position: relative; }
+.nav__link::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: 2px;
+  height: 1.5px;
+  border-radius: 2px;
+  background: var(--flow-4);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--t-standard) var(--ease);
+}
+.nav__link[data-active="true"]::after { transform: scaleX(1); }
+.nav__link[data-active="true"] { color: var(--osmos-text); }
+
+/* FAQ open/close. <details> cannot animate height; a 0fr -> 1fr grid row can. */
+[data-js] .faq__answer {
+  display: grid;
+  grid-template-rows: 1fr;
+  padding-bottom: 0;
+  transition: grid-template-rows var(--t-standard) var(--ease);
+}
+[data-js] .faq__item:not([open]) .faq__answer { grid-template-rows: 0fr; }
+[data-js] .faq__item[open] .faq__answer { padding-bottom: var(--s-5); }
+[data-js] .faq__answer > * { overflow: hidden; }
+
+/* ==========================================================================
+   17. The comet — the handoff pulse, improved.
+   A bare dot reads as a loading spinner. A dot with a trail reads as something
+   travelling from one place to another, which is the entire claim.
+   ========================================================================== */
+.axis__pulse::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 100%;
+  translate: 0 -50%;
+  width: 64px;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(270deg, var(--pulse-color), transparent);
+  opacity: .8;
+}
+/* Stacked layout travels top-to-bottom, so the trail follows above instead. */
+@media (max-width: 59.99rem) {
+  .axis__pulse::after {
+    top: auto; bottom: 100%; right: auto; left: 50%;
+    translate: -50% 0;
+    width: 3px; height: 64px;
+    background: linear-gradient(0deg, var(--pulse-color), transparent);
+  }
+}
+
+/* The capture beat: the decision is recognised in the conversation before it
+   reaches the shared layer, so the source card lights first. */
+.moment[data-phase="capture"] .agent[data-role="source"] {
+  border-color: color-mix(in srgb, var(--flow-1) 60%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--flow-1) 30%, transparent);
+}
+
+.axis__core {
+  transition: border-color var(--t-standard) var(--ease),
+              transform var(--t-standard) var(--ease);
+}
+.moment[data-phase="capture"] .axis__core,
+.moment[data-phase="travel"] .axis__core { transform: scale(1.03); }
+.moment[data-phase="capture"] .axis__core {
+  border-color: color-mix(in srgb, var(--flow-1) 50%, transparent);
+}
+.axis__rev[data-bump="true"] { animation: rev-bump 520ms var(--ease); }
+@keyframes rev-bump {
+  0%   { transform: translateY(0); opacity: 1; }
+  35%  { transform: translateY(-7px); opacity: 0; }
+  36%  { transform: translateY(7px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+#moment-dest[data-arrived="true"] { animation: arrive 520ms var(--ease) both; }
+@keyframes arrive {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ==========================================================================
+   18. Contexts — named projects, switchable from the chat itself
+   ========================================================================== */
+.ctx-cards { display: grid; gap: var(--s-4); grid-template-columns: 1fr; }
+@media (min-width: 48rem) { .ctx-cards { grid-template-columns: repeat(3, 1fr); } }
+.ctx-cards > * { min-width: 0; }
+.ctx-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-4) var(--s-5);
+  border: 1px solid var(--osmos-border);
+  border-radius: var(--osmos-radius-lg);
+  background: var(--osmos-surface);
+  transition: border-color var(--t-standard) var(--ease),
+              background var(--t-standard) var(--ease);
+}
+.ctx-card[data-active="true"] {
+  border-color: color-mix(in srgb, var(--flow-4) 60%, transparent);
+  background: var(--osmos-surface-raised);
+}
+.ctx-card__top { display: flex; align-items: center; gap: var(--s-3); }
+.ctx-card__name { font-size: 1rem; font-weight: 600; }
+.ctx-card__rev {
+  margin-left: auto;
+  font-family: var(--osmos-font-mono);
+  font-size: .75rem;
+  color: var(--osmos-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.ctx-card__meta { font-size: .8125rem; color: var(--osmos-text-muted); }
+.ctx-card__live {
+  display: none;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: .6875rem;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--osmos-text);
+}
+.ctx-card[data-active="true"] .ctx-card__live { display: inline-flex; }
+.ctx-card__live::before {
+  content: "";
+  width: 6px; height: 6px; border-radius: 999px;
+  background: var(--flow-5);
+  animation: live 2.6s var(--ease) infinite;
+}
+@keyframes live {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--flow-5) 55%, transparent); }
+  70%  { box-shadow: 0 0 0 7px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+@media (prefers-reduced-motion: reduce) { .ctx-card__live::before { animation: none; } }
+
+/* ==========================================================================
+   19. Sharing dials — the Google-Docs model, made touchable
+   ========================================================================== */
+.dials { display: grid; gap: var(--s-4); grid-template-columns: 1fr; align-items: start; }
+@media (min-width: 60rem) { .dials { grid-template-columns: 1.25fr 1fr; gap: var(--s-6); } }
+.dials > * { min-width: 0; }
+
+.dial-panel {
+  padding: var(--s-5);
+  border: 1px solid var(--osmos-border);
+  border-radius: var(--osmos-radius-lg);
+  background: var(--osmos-surface);
+}
+.dial + .dial { margin-top: var(--s-5); padding-top: var(--s-5); border-top: 1px solid var(--osmos-border); }
+.dial__name { font-size: .9375rem; font-weight: 600; }
+.dial__note { margin: var(--s-2) 0 var(--s-3); font-size: .8125rem; color: var(--osmos-text-muted); }
+.dial__opts { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.dial__opt {
+  min-height: 34px;
+  padding: 0 var(--s-4);
+  border-radius: 999px;
+  border: 1px solid var(--osmos-border);
+  background: transparent;
+  color: var(--osmos-text-muted);
+  font-size: .8125rem;
+  cursor: pointer;
+  transition: background var(--t-micro) var(--ease),
+              border-color var(--t-micro) var(--ease),
+              color var(--t-micro) var(--ease);
+}
+.dial__opt[aria-pressed="true"] {
+  background: var(--osmos-surface-raised);
+  border-color: color-mix(in srgb, var(--flow-4) 55%, transparent);
+  color: var(--osmos-text);
+}
+
+.who {
+  padding: var(--s-5);
+  border: 1px solid var(--osmos-border);
+  border-radius: var(--osmos-radius-lg);
+  background: var(--osmos-surface-raised);
+}
+.who__title {
+  font-size: .75rem; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--osmos-text-muted); margin-bottom: var(--s-4);
+}
+.who__list { display: flex; flex-direction: column; gap: var(--s-2); }
+.who__row {
+  display: flex; align-items: center; gap: var(--s-3);
+  padding: var(--s-3);
+  border-radius: var(--osmos-radius-sm);
+  background: var(--osmos-bg);
+  border: 1px solid var(--osmos-border);
+  font-size: .8125rem;
+  animation: mem-in var(--t-standard) var(--ease) both;
+}
+.who__level {
+  margin-left: auto; flex: none;
+  font-size: .6875rem; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--osmos-text-muted);
+}
+.who__row[data-level="edit"] .who__level,
+.who__row[data-level="manage"] .who__level { color: var(--osmos-text); }
+.who__note { margin-top: var(--s-4); font-size: .8125rem; color: var(--osmos-text-muted); }
+
+/* ==========================================================================
+   20. Sync receipt — what one agent was actually shown
+   ========================================================================== */
+.receipt {
+  border: 1px solid var(--osmos-border);
+  border-radius: var(--osmos-radius-lg);
+  background: var(--osmos-surface);
+  overflow: hidden;
+}
+.receipt__head {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3);
+  padding: var(--s-4) var(--s-5);
+  border-bottom: 1px solid var(--osmos-border);
+}
+.receipt__task { font-size: .9375rem; font-weight: 500; }
+.receipt__when { margin-left: auto; font-size: .75rem; color: var(--osmos-text-muted); }
+.receipt__stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1px;
+  background: var(--osmos-border);
+}
+@media (min-width: 48rem) { .receipt__stats { grid-template-columns: repeat(4, 1fr); } }
+.stat { padding: var(--s-5); background: var(--osmos-surface); }
+.stat__n {
+  display: block;
+  font-size: clamp(1.75rem, 1.4rem + 1.4vw, 2.25rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.stat__l { display: block; margin-top: var(--s-2); font-size: .8125rem; color: var(--osmos-text-muted); }
+.stat--held .stat__n { color: var(--osmos-text-muted); }
+.receipt__foot {
+  padding: var(--s-4) var(--s-5);
+  border-top: 1px solid var(--osmos-border);
+  font-size: .8125rem;
+  color: var(--osmos-text-muted);
+}
+
+/* ==========================================================================
+   21. App preview — a live surface rather than a screenshot
+   ========================================================================== */
+.appwin {
+  border: 1px solid var(--osmos-border);
+  border-radius: var(--osmos-radius-lg);
+  background: var(--osmos-surface);
+  overflow: hidden;
+}
+.appwin__bar {
+  display: flex; align-items: center; gap: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  border-bottom: 1px solid var(--osmos-border);
+  background: var(--osmos-surface-raised);
+}
+.appwin__dots { display: flex; gap: 6px; }
+.appwin__dots span { width: 9px; height: 9px; border-radius: 999px; background: var(--osmos-border); }
+.appwin__where { font-size: .8125rem; color: var(--osmos-text-muted); }
+.appwin__tabs { display: flex; gap: var(--s-1); padding: var(--s-3) var(--s-4) 0; overflow-x: auto; }
+.apptab {
+  position: relative;
+  min-height: 38px;
+  padding: 0 var(--s-4);
+  border: 0;
+  background: transparent;
+  color: var(--osmos-text-muted);
+  font-size: .875rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color var(--t-micro) var(--ease);
+}
+.apptab::after {
+  content: "";
+  position: absolute; left: var(--s-3); right: var(--s-3); bottom: 0;
+  height: 2px; border-radius: 2px;
+  background: var(--flow-4);
+  transform: scaleX(0);
+  transition: transform var(--t-standard) var(--ease);
+}
+.apptab[aria-selected="true"] { color: var(--osmos-text); }
+.apptab[aria-selected="true"]::after { transform: scaleX(1); }
+.appwin__body { border-top: 1px solid var(--osmos-border); padding: var(--s-5); }
+.apppanel { display: flex; flex-direction: column; gap: var(--s-2); animation: arrive 320ms var(--ease) both; }
+.apppanel[hidden] { display: none; }
+.approw {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  border: 1px solid var(--osmos-border);
+  border-radius: var(--osmos-radius-sm);
+  background: var(--osmos-bg);
+  font-size: .875rem;
+}
+.approw__main { min-width: 0; flex: 1 1 240px; }
+.approw__meta { margin-left: auto; flex: none; font-size: .75rem; color: var(--osmos-text-muted); }
+.badge {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--osmos-border);
+  font-family: var(--osmos-font-mono);
+  font-size: .625rem;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--osmos-text-muted);
+}
+.badge--handoff { border-color: color-mix(in srgb, var(--flow-4) 55%, transparent); color: var(--osmos-text); }
+.badge--private { border-style: dashed; }
+
+/* ==========================================================================
+   22. Tool list
+   ========================================================================== */
+.tools { display: grid; gap: var(--s-2); grid-template-columns: 1fr; }
+@media (min-width: 40rem) { .tools { grid-template-columns: 1fr 1fr; } }
+.tools > * { min-width: 0; }
+.tool {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s-2) var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  border: 1px solid var(--osmos-border);
+  border-radius: var(--osmos-radius-sm);
+  background: var(--osmos-surface);
+}
+.tool__n { font-family: var(--osmos-font-mono); font-size: .8125rem; color: var(--osmos-text); flex: none; }
+.tool__d { font-size: .8125rem; color: var(--osmos-text-muted); }
+
+/* ==========================================================================
+   23. Small helpers
+   ========================================================================== */
+.center { text-align: center; }
+.mt-4 { margin-top: var(--s-4); }
+.mt-5 { margin-top: var(--s-5); }
+.mt-6 { margin-top: var(--s-6); }
+.mt-7 { margin-top: var(--s-7); }
+.inline-cta { display: inline-flex; align-items: center; gap: var(--s-2); min-height: 24px; }

@@ -2,8 +2,36 @@
 
 How the public site in `website/site/` is built, and the rules it is held to.
 
-**Status:** v1 built — homepage, `/get-started`, `/security`.
+**Status:** built and updated to match the V3 product — homepage, `/get-started`, `/security`.
 **Stack:** hand-authored static HTML + CSS + vanilla JS. No build step, no dependencies.
+
+> **Read §0 first if you are updating copy.** The product moved a long way after the first version
+> of this site was written, and the site is only trustworthy while it keeps up.
+
+---
+
+## 0. What the V3 update changed, and why
+
+The first version of this site described a product where a team shared **one** project, an
+administrator created accounts **from a CLI**, and agents had **eight** tools. None of that is true
+any more. The update brought the site level with what ships:
+
+| The product now has | What the site does about it |
+|---|---|
+| Multiple named contexts, switched from the chat itself | New `#contexts` section; "context" replaces "project" as the user-facing noun |
+| Sharing per person, by link, and by organisation | New `#sharing` section with the three dials made touchable |
+| A record of what each agent was shown, per sync | New `#receipts` section — the strongest trust argument the product has |
+| A web app at `/app`: Memory · People · Activity · What AI saw | New `#app` section, built as a working tab surface rather than a screenshot |
+| Public signup, invitations, Google and GitHub sign-in | `/get-started` step 2 is now "sign in and create a context"; the CLI steps are gone |
+| Archiving, and retention that keeps memory but expires sync records | Stated on `/security` and in the FAQ |
+| Twelve MCP tools | The developer section lists them; "eight tools" corrected everywhere |
+
+**The rule this leaves behind:** when the product gains a user-visible capability, this site is part
+of the change, not a follow-up. A marketing page that describes a version of the product nobody is
+running is worse than no page — it teaches people the wrong model and they hit the difference later.
+
+The one thing deliberately *removed*: the 16:9 video placeholder. The homepage now has three real
+product surfaces a visitor can operate, which is what the placeholder was standing in for.
 
 ---
 
@@ -50,9 +78,14 @@ website/site/
 ├── styles.css           design system; layered on osmos.css
 ├── osmos-moment.js      the interactive handoff demo
 ├── context-model.js     the private/shared scope model
+├── product.js           the sharing dials + the app-preview tabs
+├── motion.js            reveals, nav scrollspy, counters
 ├── theme.js             theme toggle + no-flash init
 └── assets/              logos, favicon, OG image
 ```
+
+Each script is independent and guards on its own root element, so a page loads only what it needs
+and a missing section is a no-op rather than an error.
 
 `site/osmos.css` is a **copy** of `../osmos.css`, so the folder deploys standalone as a web root.
 Re-sync it whenever brand tokens change:
@@ -175,7 +208,8 @@ Apple's HIG, and it is the strongest available proof for a product with nothing 
 
 ## 6b. The scope model — two private contexts, one shared project
 
-`#contexts` on the homepage, driven by `context-model.js`.
+`#scopes` on the homepage, driven by `context-model.js`. (It was `#contexts` until the V3 update
+took that id for the named-contexts section — the JS keys off `#scope-model`, not the section id.)
 
 Where the Osmos Moment shows *what happens*, this shows *how the data is arranged* — three zones:
 Person A's private scope, the shared project context, Person B's private scope.
@@ -216,6 +250,66 @@ de-emphasised (analogous to a disabled control) and is exempted from the contras
 
 ---
 
+## 6c. The three surfaces added in the V3 update
+
+All three follow the same rule as the Osmos Moment: a visitor should be able to *operate* the claim,
+not read an assertion about it.
+
+### `#sharing` — the dials (`product.js`)
+
+Three independent controls whose combined effect is rendered as a live "who can read this context"
+list. Accuracy constraints that shape the component, all taken from `docs/SETUP.md`:
+
+- The dials are **additive and independent**. A link grant does not upgrade a person grant, and
+  turning one off does not affect another.
+- Neither the link dial nor the organisation dial offers **manage**. That is not a simplification for
+  the demo — manage carries the right to re-share, and the product refuses to let a link or a group
+  membership pass that on.
+- The organisation dial starts at **no access**, because that is the real default: grouping contexts
+  and exposing them are separate decisions.
+- The explanatory line under the list is generated from the current state, so it can never drift out
+  of step with what the dials say.
+
+### `#receipts` — the sync record
+
+A single record rendered honestly: memories included, memories withheld, the revision, and the token
+estimate against the 3,000-token default budget. Two details are load-bearing and must survive any
+rewrite: withheld items are **counted, never named**, and the record is **private to the person whose
+agent made the call**. Numbers count up on reveal; the revision does not, because a revision is an
+identifier rather than a quantity.
+
+### `#app` — the app preview
+
+The four tabs of the real context view — Memory, People, Activity, What AI saw — built as a genuine
+`role="tablist"` with arrow-key support rather than an image. The row contents mirror what the app
+actually shows, including the "from a teammate" badge that marks knowledge which arrived from
+someone else's agent. If the app's tabs change, this changes with them.
+
+---
+
+## 6d. Motion rules (`motion.js`)
+
+Motion was expanded in the V3 update, and the original constraint still governs it: **motion
+explains, it does not decorate.**
+
+| Effect | Rule it obeys |
+|---|---|
+| Section reveals | One-time, 12px, ~560ms, staggered at most four deep. An element never re-animates when it scrolls past again. |
+| Nav scrollspy | Marks where you *are*. Topmost visible section wins, so two links are never lit at once. |
+| Counters | Ease-out over 900ms, thousands-grouped. They land; they do not coast. |
+| Hero wash | The only colour that appears without knowledge moving. Blurred, behind content, and `overflow: clip` on the hero so it cannot widen the document. |
+| Card hover | 2px lift. Enough to read as a surface, never enough to move the layout. |
+| FAQ | `grid-template-rows: 0fr → 1fr`, because `<details>` cannot animate height. |
+
+Two failure modes are designed out, not patched:
+
+1. **A JS failure must not blank the page.** Reveal styles are scoped to `[data-js]`, which the
+   inline head script sets. If that script never runs, nothing is hidden.
+2. **`prefers-reduced-motion` is checked before anything animates.** Counters jump to their value and
+   reveals resolve instantly, rather than animating and then being suppressed.
+
+---
+
 ## 7. Honesty constraints
 
 Enforced from `WEBSITE_PLAN.md` §21 and the product's own principle #4, *"Humans Must Be Able to
@@ -237,8 +331,11 @@ Inspect the Brain."* A site that overstates the product contradicts the product'
 - **Social proof section** — no genuine metrics, quotes, or logos exist. `WEBSITE_PLAN.md` §15
   forbids fabricating them, and a "coming soon" block is worse than nothing. Left as an HTML comment
   recording what evidence would unlock it.
-- **Video sections** — reserved as poster slots at the correct position and aspect ratio. The 45–75s
-  film in `WEBSITE_PLAN.md` §7 has to be produced separately.
+- **Video sections** — the 16:9 poster slot was removed in the V3 update. An empty dashed box that
+  says "placeholder" advertises what the site does not have; three operable product surfaces make the
+  same point better. The 45–75s film in `WEBSITE_PLAN.md` §7 can still be produced and slotted in.
+- **Any claim of a hosted service.** You run Osmos yourself. `/get-started` and the FAQ both say so,
+  because a signup button that leads nowhere is the fastest way to lose a visitor's trust.
 
 ---
 
@@ -258,7 +355,7 @@ wired later by reading the attributes.
 | Deference to content | Neutral surfaces throughout; color only where knowledge moves |
 | Direct manipulation | The Osmos Moment is interactive, not a video |
 | One idea per section | Each section makes one claim; two claims means it splits |
-| Motion explains | Only the handoff animates. No scroll-reveal on everything |
+| Motion explains | Reveals are one-time and small; only the handoff performs. See §6d |
 | Feedback | The demo has visible state; copy buttons confirm |
 | Forgiveness | Replay always available; no dead ends |
 | Perceived stability | Persistent nav, one grid, consistent section rhythm |
@@ -288,9 +385,13 @@ Held to the thresholds in `../research/03-web-platform-rules.md`:
 
 The site is standalone static files — no server required, and **no changes to the FastAPI app**.
 
-Note that `app/main.py:200` mounts the MCP app at `/`, so the API service's domain root is already
-taken. The site therefore wants either its own host (`www.<domain>` with the service on
-`api.<domain>`) or any static host: Render static site, Netlify, Cloudflare Pages, GitHub Pages.
+The API service's domain root is already taken twice over: the MCP app is mounted at `/`, and `/`
+itself redirects to `/app` (`app/webapp.py`). The site therefore wants either its own host
+(`www.<domain>` with the service on `api.<domain>`) or any static host: Render static site, Netlify,
+Cloudflare Pages, GitHub Pages.
+
+Wherever it lands, the **Get Osmos** path and the `/app` sign-in should point at the running service,
+so the two halves of the product feel like one thing.
 
 Locally:
 
@@ -302,8 +403,11 @@ python -m http.server -d website/site 8080
 
 ## 12. Not built yet
 
-- The two product videos — placeholders only
+- The two product videos — cut rather than stubbed; see §7
 - Real social proof — needs genuine data
+- Real screenshots of `/app` — the preview is a faithful reconstruction, not a capture. Swap it for
+  the real thing once there is a deployment whose contents can be shown publicly
+- A pricing page — there is no pricing
 - `/product`, `/how-it-works`, `/developers`, `/pricing`, integration pages — P1 in `WEBSITE_PLAN.md`
 - Domain, DNS, and deploy — needs a hosting decision
 - Self-hosted Inter woff2 files — the site currently uses the documented fallback stack

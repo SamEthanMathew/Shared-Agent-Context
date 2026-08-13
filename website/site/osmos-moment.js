@@ -55,17 +55,29 @@
     root.setAttribute("data-phase", "idle");
     root.style.setProperty("--pulse-color", "var(" + FLOW[0] + ")");
     revEl.textContent = "r41";
+    revEl.removeAttribute("data-bump");
     destEl.innerHTML = ASK;
     destEl.classList.add("agent__msg--empty");
+    destEl.removeAttribute("data-arrived");
     destCard.setAttribute("data-active", "false");
     chipEl.setAttribute("data-visible", "false");
   }
 
+  /* The revision flips rather than fading. It is a counter, and a counter that
+     cross-fades reads as a value being corrected instead of advanced. */
+  function bumpRev(value) {
+    revEl.setAttribute("data-bump", "true");
+    later(function () { revEl.textContent = value; }, 180);
+    later(function () { revEl.removeAttribute("data-bump"); }, 560);
+  }
+
   /* The end state: what the visitor is meant to understand. */
-  function settle(withOsmos) {
+  function settle(withOsmos, animate) {
     revEl.textContent = withOsmos ? "r42" : "r41";
     destEl.innerHTML = withOsmos ? ANSWER : GUESSED;
     destEl.classList.remove("agent__msg--empty");
+    if (animate) destEl.setAttribute("data-arrived", "true");
+    else destEl.removeAttribute("data-arrived");
     destCard.setAttribute("data-active", withOsmos ? "true" : "false");
     chipEl.setAttribute("data-visible", withOsmos ? "true" : "false");
     if (withOsmos && chipText) chipText.textContent = "Used from Osmos · Sam / ChatGPT · r42";
@@ -79,23 +91,29 @@
     var withOsmos = root.getAttribute("data-mode") === "with";
     reset();
 
-    if (!withOsmos) { settle(false); return; }
+    if (!withOsmos) { settle(false, false); return; }
 
-    if (reduced()) { settle(true); return; }
+    if (reduced()) { settle(true, false); return; }
 
-    say("Publishing decision…");
-    root.setAttribute("data-phase", "travel");
+    /* A short capture beat before the pulse leaves. Without it the decision
+       appears to originate on the axis rather than in the conversation. */
+    say("Sam's agent publishes the decision…");
+    root.setAttribute("data-phase", "capture");
 
-    /* Traverse violet -> aqua while the pulse crosses the axis. */
-    var step = HANDOFF / FLOW.length;
-    FLOW.forEach(function (token, i) {
-      later(function () {
-        root.style.setProperty("--pulse-color", "var(" + token + ")");
-      }, i * step);
-    });
+    later(function () {
+      root.setAttribute("data-phase", "travel");
 
-    later(function () { revEl.textContent = "r42"; say("Revision r42 recorded."); }, HANDOFF * 0.55);
-    later(function () { settle(true); }, HANDOFF);
+      /* Traverse violet -> aqua while the pulse crosses the axis. */
+      var step = HANDOFF / FLOW.length;
+      FLOW.forEach(function (token, i) {
+        later(function () {
+          root.style.setProperty("--pulse-color", "var(" + token + ")");
+        }, i * step);
+      });
+
+      later(function () { bumpRev("r42"); say("Revision r42 recorded."); }, HANDOFF * 0.55);
+      later(function () { settle(true, true); }, HANDOFF);
+    }, 320);
   }
 
   function setMode(mode) {

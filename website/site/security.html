@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Security and privacy — Osmos</title>
-<meta name="description" content="What Osmos enforces today: OAuth 2.1 identity, private and shared scopes, permission filtering before context compilation, provenance, revocation, and audit.">
+<meta name="description" content="What Osmos enforces today: OAuth 2.1 identity, private and shared scopes, permission filtering before context is assembled, human-only sharing, provenance, revocation, and a record of what every agent was shown.">
 <link rel="canonical" href="/security">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Security and privacy — Osmos">
@@ -14,7 +14,7 @@
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <meta name="color-scheme" content="dark light">
 <script>
-(function(){try{var t=localStorage.getItem("osmos-theme");if(!t){t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";}document.documentElement.setAttribute("data-theme",t);}catch(e){}})();
+(function(){try{var t=localStorage.getItem("osmos-theme");if(!t){t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";}document.documentElement.setAttribute("data-theme",t);document.documentElement.setAttribute("data-js","1");}catch(e){}})();
 </script>
 <link rel="stylesheet" href="osmos.css">
 <link rel="stylesheet" href="styles.css">
@@ -30,7 +30,8 @@
       <span class="nav__word">OSMOS</span>
     </a>
     <nav class="nav__links" aria-label="Primary">
-      <a class="nav__link" href="index.html#how">How it works</a>
+      <a class="nav__link" href="index.html#contexts">Contexts</a>
+      <a class="nav__link" href="index.html#sharing">Sharing</a>
       <a class="nav__link" href="index.html#developers">Developers</a>
       <a class="nav__link" href="security.html" aria-current="page">Security</a>
     </nav>
@@ -50,55 +51,99 @@
     <div class="container">
       <div class="hero__inner">
         <h1 class="t-hero hero__title">The model is not the authorisation layer.</h1>
-        <p class="t-lead hero__lead">Identity, membership, and scope are resolved by the server before any context is compiled. An agent cannot receive memory its caller isn't entitled to, because that memory never enters the response.</p>
+        <p class="t-lead hero__lead">Identity, membership, and scope are resolved by the server before any context is assembled. An agent cannot receive memory its caller isn't entitled to, because that memory never enters the response.</p>
       </div>
     </div>
   </section>
 
   <section class="section" aria-labelledby="today-h">
     <div class="container">
-      <div class="section__head">
+      <div class="section__head" data-reveal>
         <span class="eyebrow">Enforced today</span>
         <h2 class="t-h2" id="today-h">What Osmos actually does</h2>
-        <p class="t-lead" style="margin-top:var(--s-4)">Everything on this page is implemented and running. Where something is designed but not yet enforced, it is listed in the next section instead.</p>
+        <p class="t-lead mt-4">Everything on this page is implemented and running. Where something is designed but not yet enforced, it is in the next section instead.</p>
       </div>
 
-      <div class="deflist">
+      <div class="deflist" data-reveal>
         <div class="deflist__row">
           <span class="deflist__term">Verified identity</span>
-          <span class="t-body">An OAuth 2.1 authorization server runs inside the service — authorization code with PKCE, dynamic client registration, and Client ID Metadata Documents. Tokens are verified on both the MCP and REST surfaces by the same provider.</span>
+          <span class="t-body">An OAuth 2.1 authorization server runs inside the service — authorization code with PKCE, dynamic client registration, and Client ID Metadata Documents. Tokens are verified on both the MCP and REST surfaces by the same provider. People sign in with Google, GitHub, or an email address and password.</span>
         </div>
         <div class="deflist__row">
           <span class="deflist__term">Per-client connections</span>
-          <span class="t-body">Each connected client is a distinct, listed connection carrying its own identity and scopes. Connections are revocable individually, without disturbing the others.</span>
+          <span class="t-body">Each connected assistant is a distinct, listed connection carrying its own identity. Connections are revocable individually, without disturbing the others, and the next call from a revoked one fails.</span>
         </div>
         <div class="deflist__row">
           <span class="deflist__term">Private and shared scopes</span>
-          <span class="t-body">Two scopes. Private memory belongs to the person who wrote it; shared memory belongs to the project. The distinction is enforced in storage and in retrieval.</span>
+          <span class="t-body">Private memory belongs to the person who wrote it; shared memory belongs to the context. The distinction is enforced in storage and in retrieval, not by asking a model to keep a secret.</span>
         </div>
         <div class="deflist__row">
-          <span class="deflist__term">Filtering before compilation</span>
-          <span class="t-body">Permission filtering happens in SQL, before context is assembled. This is the architectural difference that matters: unauthorised memory is never selected, rather than selected and then removed.</span>
+          <span class="deflist__term">Filtering before assembly</span>
+          <span class="t-body">Permission filtering happens in SQL, before context is compiled. This is the architectural difference that matters: unauthorised memory is never selected, rather than selected and then removed.</span>
+        </div>
+        <div class="deflist__row">
+          <span class="deflist__term">Sharing is a human action</span>
+          <span class="t-body">There is no tool an assistant can call to grant anyone access. Every grant is made by a person, in the app, and is recorded. An agent cannot be talked into widening access it does not control.</span>
+        </div>
+        <div class="deflist__row">
+          <span class="deflist__term">Re-sharing stays with people</span>
+          <span class="t-body">A share link can grant view or edit, never manage — and neither can organisation access. Manage carries the right to re-share, and a link or a group membership that could pass that on would propagate access no human chose.</span>
+        </div>
+        <div class="deflist__row">
+          <span class="deflist__term">Groups grant nothing by default</span>
+          <span class="t-body">Creating an organisation, adding people to it, and moving a context into it all grant nothing on their own; access begins only when someone sets that control. An individual invitation outranks it, so removing a person from the group revokes only what the group gave them.</span>
+        </div>
+        <div class="deflist__row">
+          <span class="deflist__term">Address ownership is proven</span>
+          <span class="t-body">An unverified account cannot create contexts or accept shares, and an unverified address is treated as no account at all — otherwise anyone could register someone else's address and quietly collect the contexts shared to it. Federated sign-in that cannot prove the address is refused rather than linked.</span>
         </div>
         <div class="deflist__row">
           <span class="deflist__term">Provenance</span>
-          <span class="t-body">Durable knowledge carries the evidence event it came from, its author, its agent, its type, and its time. A claim inferred by an agent is distinguishable from a decision made by a person.</span>
+          <span class="t-body">Durable knowledge carries the evidence it came from, its author, its agent, its type, and its time. A claim inferred by an agent is distinguishable from a decision made by a person.</span>
         </div>
         <div class="deflist__row">
           <span class="deflist__term">Versions and supersession</span>
-          <span class="t-body">Knowledge can explicitly supersede earlier knowledge. History is retained, so you can see what the project used to believe and when that changed.</span>
+          <span class="t-body">Knowledge can explicitly supersede earlier knowledge. History is retained, so you can see what the project used to believe and when that changed. Anything wrong can be retracted, and agents stop receiving it.</span>
         </div>
         <div class="deflist__row">
-          <span class="deflist__term">Audit log</span>
-          <span class="t-body">Reads and writes are recorded. Context snapshots double as privacy manifests — a record of exactly what was handed to which client for which task.</span>
+          <span class="deflist__term">A record of what each agent saw</span>
+          <span class="t-body">Every sync is recorded: the task, the revision, what was included, how much was withheld and why, and the token estimate against the requested budget. Withheld items are counted, never named. The record belongs to the person whose agent made the call — not even a context's owner can read someone else's, because it enumerates their private memory.</span>
         </div>
         <div class="deflist__row">
-          <span class="deflist__term">Human control plane</span>
-          <span class="t-body">A console for inspecting members, connected clients, shared and private memories, and the audit feed — with retraction, so a human can correct the project's beliefs.</span>
+          <span class="deflist__term">Access history</span>
+          <span class="t-body">Who shared what with whom, every access change, and every archive or restore are kept for as long as the context exists. "When did this become visible to them" is a question asked months later, so the answer is not something retention removes.</span>
+        </div>
+        <div class="deflist__row">
+          <span class="deflist__term">Archiving keeps the memory</span>
+          <span class="t-body">Archiving a context removes it from every listing and stops agents seeing it immediately, but deletes nothing. Restoring it brings everything back at the same revision.</span>
         </div>
         <div class="deflist__row">
           <span class="deflist__term">Monotonic revisions</span>
-          <span class="t-body">Each project carries a revision that only moves forward, so a client can tell whether anything changed since it last synced.</span>
+          <span class="t-body">Each context carries a revision that only moves forward, so a client can tell whether anything changed since it last synced.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="keep-h">
+    <div class="container">
+      <div class="section__head" data-reveal>
+        <span class="eyebrow">Retention</span>
+        <h2 class="t-h2" id="keep-h">How long things are kept</h2>
+        <p class="t-lead mt-4">Retention never touches the product's actual content. It expires the by-products that would otherwise become an asset of their own.</p>
+      </div>
+      <div class="grid grid--3" data-reveal-group>
+        <div class="card" data-reveal>
+          <h3 class="t-h3 card__title">Memory — indefinitely</h3>
+          <p class="t-body">Shared and private memory is the project brain. It is kept until you retract it or delete the context.</p>
+        </div>
+        <div class="card" data-reveal>
+          <h3 class="t-h3 card__title">Access history — indefinitely</h3>
+          <p class="t-body">Small, append-only, and the record you need to answer a question about who could see what, and when.</p>
+        </div>
+        <div class="card" data-reveal>
+          <h3 class="t-h3 card__title">Sync records — 90 days</h3>
+          <p class="t-body">Each one lists the memories fed to one person's agent, including their private ones. Long enough to answer "what did it know", short enough not to accumulate a history of everything each assistant ever saw.</p>
         </div>
       </div>
     </div>
@@ -106,26 +151,26 @@
 
   <section class="section" aria-labelledby="limits-h">
     <div class="container">
-      <div class="section__head">
+      <div class="section__head" data-reveal>
         <span class="eyebrow">Limits</span>
         <h2 class="t-h2" id="limits-h">What it does not do yet</h2>
-        <p class="t-lead" style="margin-top:var(--s-4)">Stated plainly, because a product about inspectable knowledge cannot be vague about its own.</p>
+        <p class="t-lead mt-4">Stated plainly, because a product about inspectable knowledge cannot be vague about its own.</p>
       </div>
 
-      <div class="grid grid--2">
-        <div class="card">
+      <div class="grid grid--2" data-reveal-group>
+        <div class="card" data-reveal>
           <h3 class="t-h3 card__title">Sensitivity ceilings are not enforced</h3>
           <p class="t-body">Every memory carries a sensitivity label, and writes marked <code class="t-mono">secret</code> are refused. But per-grant sensitivity ceilings — capping what a specific client may ever receive — are designed and not yet implemented.</p>
         </div>
-        <div class="card">
+        <div class="card" data-reveal>
           <h3 class="t-h3 card__title">Local mode is unauthenticated</h3>
           <p class="t-body">The default <code class="t-mono">dev</code> mode identifies callers from an actor email supplied by the client. It is spoofable by design and exists for local development. Public deployments must set <code class="t-mono">SAC_AUTH_MODE=auth</code>.</p>
         </div>
-        <div class="card">
+        <div class="card" data-reveal>
           <h3 class="t-h3 card__title">No compliance certifications</h3>
           <p class="t-body">Osmos holds no SOC 2, ISO 27001, or HIPAA attestation, and this page will not claim otherwise. You run the service yourself, on infrastructure you control and are responsible for.</p>
         </div>
-        <div class="card">
+        <div class="card" data-reveal>
           <h3 class="t-h3 card__title">Retrieval is lexical</h3>
           <p class="t-body">Ranking combines lexical match, type, importance, and recency. There is no embedding model yet. The trade is inspectability and determinism over semantic recall.</p>
         </div>
@@ -135,15 +180,15 @@
 
   <section class="section" aria-labelledby="posture-h">
     <div class="container">
-      <div class="section__head">
+      <div class="section__head" data-reveal>
         <h2 class="t-h2" id="posture-h">The two rules underneath</h2>
       </div>
-      <div class="grid grid--2">
-        <div class="card">
+      <div class="grid grid--2" data-reveal-group>
+        <div class="card" data-reveal>
           <h3 class="t-h3 card__title">Connecting a client is not consent to share everything</h3>
           <p class="t-body">Authorising an agent grants it an identity, not the project's entire contents. What it can read is a function of who its caller is and what scope the knowledge lives in — evaluated per request.</p>
         </div>
-        <div class="card">
+        <div class="card" data-reveal>
           <h3 class="t-h3 card__title">Retrieved context is data, not instructions</h3>
           <p class="t-body">Knowledge returned by Osmos is evidence for the agent to reason over. It is never treated as higher-priority instruction, which is what keeps a poisoned memory from becoming a command.</p>
         </div>
@@ -175,5 +220,6 @@
 </footer>
 
 <script src="theme.js"></script>
+<script src="motion.js"></script>
 </body>
 </html>

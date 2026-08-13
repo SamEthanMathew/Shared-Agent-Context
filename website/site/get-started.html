@@ -4,17 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Get Osmos — run it and connect your agents</title>
-<meta name="description" content="Run Osmos for your team and connect Claude and ChatGPT, or try it on your own machine in about two minutes.">
+<meta name="description" content="Run Osmos for your team, connect Claude and ChatGPT, and invite people by email or link. Or try it on your own machine in about two minutes.">
 <link rel="canonical" href="/get-started">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Get Osmos">
-<meta property="og:description" content="Run it, connect your agents, and watch the first handoff.">
+<meta property="og:description" content="Run it, connect your assistants, invite your team, and watch the first handoff.">
 <meta property="og:image" content="assets/og-image.png">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <meta name="color-scheme" content="dark light">
 <script>
-(function(){try{var t=localStorage.getItem("osmos-theme");if(!t){t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";}document.documentElement.setAttribute("data-theme",t);}catch(e){}})();
+(function(){try{var t=localStorage.getItem("osmos-theme");if(!t){t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";}document.documentElement.setAttribute("data-theme",t);document.documentElement.setAttribute("data-js","1");}catch(e){}})();
 </script>
 <link rel="stylesheet" href="osmos.css">
 <link rel="stylesheet" href="styles.css">
@@ -30,7 +30,8 @@
       <span class="nav__word">OSMOS</span>
     </a>
     <nav class="nav__links" aria-label="Primary">
-      <a class="nav__link" href="index.html#how">How it works</a>
+      <a class="nav__link" href="index.html#contexts">Contexts</a>
+      <a class="nav__link" href="index.html#sharing">Sharing</a>
       <a class="nav__link" href="index.html#developers">Developers</a>
       <a class="nav__link" href="security.html">Security</a>
     </nav>
@@ -50,7 +51,7 @@
     <div class="container">
       <div class="hero__inner">
         <h1 class="t-hero hero__title">Get Osmos</h1>
-        <p class="t-lead hero__lead">Osmos is one Python service that you run. There is no hosted version today — you deploy it for your team, or run it locally to see it work first.</p>
+        <p class="t-lead hero__lead">One person runs the service. After that, everybody else signs in, connects their assistant, and gets on with their work — there is nothing to install on anyone's machine.</p>
       </div>
     </div>
   </section>
@@ -61,8 +62,8 @@
       <div class="track track--primary">
         <span class="track__badge">Recommended</span>
         <div class="section__head">
-          <h2 class="t-h2" id="team-h">Run it for your team</h2>
-          <p class="t-lead" style="margin-top:var(--s-4)">Osmos is multiplayer by nature — the value only appears once two agents share a project. This is the path that produces a real handoff.</p>
+          <h2 class="t-h2" id="team-h">Set it up for your team</h2>
+          <p class="t-lead mt-4">Osmos is multiplayer by nature — the value appears the moment two people's agents share a project. This is the path that produces a real handoff.</p>
         </div>
 
         <div class="steps">
@@ -70,8 +71,8 @@
           <div class="step">
             <span class="step__n" aria-hidden="true">1</span>
             <div class="step__body">
-              <h3 class="step__title">Deploy the service</h3>
-              <p class="t-body measure">The repository ships a Render blueprint (<code class="t-mono">render.yaml</code>) that provisions PostgreSQL and the web service together. Any host that runs a Python process and a Postgres database works equally well.</p>
+              <h3 class="step__title">Run the service</h3>
+              <p class="t-body measure">The repository ships a Render blueprint (<code class="t-mono">render.yaml</code>) that provisions PostgreSQL and the web service together. Any host that runs a Python process against a Postgres database works equally well.</p>
               <div class="code">
                 <div class="code__head">
                   <span class="code__name">required environment</span>
@@ -89,29 +90,17 @@ SAC_CIMD_ALLOWED_HOSTS=chatgpt.com,openai.com">Copy</button>
 <span class="k">SAC_ALLOWED_REDIRECT_HOSTS</span>=claude.ai,claude.com,chatgpt.com,openai.com
 <span class="k">SAC_CIMD_ALLOWED_HOSTS</span>=chatgpt.com,openai.com</code></pre>
               </div>
-              <p class="t-small measure"><code class="t-mono">SAC_AUTH_MODE=auth</code> is required for any deployment reachable from the internet. Record the public URL — everything below refers to it as your base URL.</p>
+              <p class="t-small measure"><code class="t-mono">SAC_AUTH_MODE=auth</code> is required for anything reachable from the internet. Record the public URL — everything below refers to it as your base URL.</p>
+              <p class="t-small measure">Two optional pieces are worth doing at the same time: an email provider, so invitations and verification links actually reach people rather than only the logs; and Google or GitHub sign-in, so nobody has to invent another password. Neither blocks you from finishing today.</p>
             </div>
           </div>
 
           <div class="step">
             <span class="step__n" aria-hidden="true">2</span>
             <div class="step__body">
-              <h3 class="step__title">Create the project and add your teammate</h3>
-              <p class="t-body measure">Run these against the deployed database — from your host's shell, or locally with <code class="t-mono">DATABASE_URL</code> pointing at it.</p>
-              <div class="code">
-                <div class="code__head">
-                  <span class="code__name">shell</span>
-                  <button class="copy" type="button" data-copy='python -m app.auth.cli add-project --owner you@example.com --name "Our Project"
-python -m app.auth.cli add-user --email teammate@example.com --password "..." --name "Teammate"
-python -m app.auth.cli add-member --project <project-id> --email teammate@example.com --role member'>Copy</button>
-                </div>
-<pre><code><span class="k">python -m app.auth.cli add-project</span> --owner you@example.com --name <span class="s">"Our Project"</span>
-
-<span class="k">python -m app.auth.cli add-user</span> --email teammate@example.com --password <span class="s">"..."</span> --name <span class="s">"Teammate"</span>
-
-<span class="k">python -m app.auth.cli add-member</span> --project &lt;project-id&gt; --email teammate@example.com --role member</code></pre>
-              </div>
-              <p class="t-small measure">Anyone who belongs to exactly one project never has to name it in a tool call — Osmos resolves it from their membership.</p>
+              <h3 class="step__title">Sign in and create a context</h3>
+              <p class="t-body measure">Open <code class="t-mono">&lt;your-base-url&gt;/app</code> and sign in with the admin account you set above. Press <strong>New context</strong> and name it after the project — "Northwind API", not "test". That name is what people will say to their assistants to switch to it.</p>
+              <p class="t-small measure">A context is one project's brain: its own memory, its own members, its own revision. Make as many as you have projects.</p>
             </div>
           </div>
 
@@ -119,7 +108,7 @@ python -m app.auth.cli add-member --project <project-id> --email teammate@exampl
             <span class="step__n" aria-hidden="true">3</span>
             <div class="step__body">
               <h3 class="step__title">Connect Claude</h3>
-              <p class="t-body measure">Settings → Connectors → <strong>Add custom connector</strong>. Give it a name and the URL <code class="t-mono">&lt;your-base-url&gt;/mcp</code>. Claude registers itself, opens the Osmos sign-in, and asks you to approve scopes. Enable the connector in your project and set the <code class="t-mono">sac_*</code> tools to “Allow always”.</p>
+              <p class="t-body measure">Settings → Connectors → <strong>Add custom connector</strong>. Give it a name and the URL <code class="t-mono">&lt;your-base-url&gt;/mcp</code>. Claude registers itself, opens the Osmos sign-in, and asks you to approve access. Enable the connector in your project and set the <code class="t-mono">sac_*</code> tools to "Allow always".</p>
             </div>
           </div>
 
@@ -134,22 +123,32 @@ python -m app.auth.cli add-member --project <project-id> --email teammate@exampl
           <div class="step">
             <span class="step__n" aria-hidden="true">5</span>
             <div class="step__body">
-              <h3 class="step__title">Tell the agents to use it</h3>
-              <p class="t-body measure">Paste this into each assistant's project instructions. It's the whole configuration — after this, nobody thinks about Osmos again.</p>
+              <h3 class="step__title">Tell the assistants to use it</h3>
+              <p class="t-body measure">Paste this into each assistant's project instructions. It is the whole configuration — after this, nobody thinks about Osmos again.</p>
               <div class="code">
                 <div class="code__head">
                   <span class="code__name">project instructions</span>
-                  <button class="copy" type="button" data-copy="Osmos is always-on shared project memory. While this connector is enabled: at the START of every turn call sac_sync_context with my request as `task` (and a short local_context_delta summarising durable knowledge from your previous turn). Use the returned context as project memory. Before your final answer, call sac_remember_shared for any reusable decision, requirement, constraint, finding or result, or sac_remember_private for your own notes. Never publish secrets or personal data. Do this automatically without asking.">Copy</button>
+                  <button class="copy" type="button" data-copy="Osmos is always-on shared project memory. While this connector is enabled: at the START of every turn call sac_sync_context with my request as `task` (and a short local_context_delta summarising durable knowledge from your previous turn). Use the returned context as project memory, and tell me which context you are working in. Before your final answer, call sac_remember_shared for any reusable decision, requirement, constraint, finding or result, or sac_remember_private for your own notes. Never publish secrets or personal data. Do this automatically without asking.">Copy</button>
                 </div>
 <pre><code><span class="o">Osmos is always-on shared project memory. While this connector is
 enabled: at the START of every turn call sac_sync_context with my
 request as `task` (and a short local_context_delta summarising durable
 knowledge from your previous turn). Use the returned context as project
-memory. Before your final answer, call sac_remember_shared for any
-reusable decision, requirement, constraint, finding or result, or
-sac_remember_private for your own notes. Never publish secrets or
-personal data. Do this automatically without asking.</span></code></pre>
+memory, and tell me which context you are working in. Before your final
+answer, call sac_remember_shared for any reusable decision, requirement,
+constraint, finding or result, or sac_remember_private for your own
+notes. Never publish secrets or personal data. Do this automatically
+without asking.</span></code></pre>
               </div>
+            </div>
+          </div>
+
+          <div class="step">
+            <span class="step__n" aria-hidden="true">6</span>
+            <div class="step__body">
+              <h3 class="step__title">Invite the people</h3>
+              <p class="t-body measure">Open the context and press <strong>Share</strong>. Invite by email at view, edit, or manage — or turn on "anyone with the link" for someone an account isn't worth the friction for. They sign in with Google, GitHub, or an email address, and land in the context.</p>
+              <p class="t-small measure">They don't clone anything or run anything. They add the same connector to their own Claude or ChatGPT and start working — and can create their account from inside the assistant, halfway through connecting, if they've never opened your site.</p>
             </div>
           </div>
 
@@ -161,32 +160,32 @@ personal data. Do this automatically without asking.</span></code></pre>
   <!-- ================= First handoff ================= -->
   <section class="section" aria-labelledby="first-h">
     <div class="container">
-      <div class="section__head">
+      <div class="section__head" data-reveal>
         <span class="eyebrow">The moment it clicks</span>
         <h2 class="t-h2" id="first-h">Your first handoff</h2>
-        <p class="t-lead" style="margin-top:var(--s-4)">Two accounts, two different assistants, no copy-paste between them. This takes about a minute and is the fastest way to know it's working.</p>
+        <p class="t-lead mt-4">Two people, two different assistants, nothing pasted between them. This takes about a minute and is the fastest way to know it's working.</p>
       </div>
 
-      <div class="grid grid--2">
-        <div class="card">
+      <div class="grid grid--2" data-reveal-group>
+        <div class="card" data-reveal>
           <span class="card__num" aria-hidden="true">1</span>
           <h3 class="t-h3 card__title">Say something durable in ChatGPT</h3>
-          <p class="t-body">“We're using Supabase Auth with passkeys.” The agent publishes it. Confirm it landed in <code class="t-mono">/console</code> — you should see the memory, a revision bump, and an audit row.</p>
+          <p class="t-body">"We're using Supabase Auth with passkeys." The agent publishes it. Check the context's <strong>Memory</strong> tab — you should see the decision, with the revision it landed at.</p>
         </div>
-        <div class="card">
+        <div class="card" data-reveal>
           <span class="card__num" aria-hidden="true">2</span>
           <h3 class="t-h3 card__title">Ask Claude something related</h3>
-          <p class="t-body">From the second account: “Implement Windows auth.” It syncs, receives the decision with no prompting from you, and works from it.</p>
+          <p class="t-body">From the second account: "Implement Windows auth." It receives the decision with no prompting from you, and works from it.</p>
         </div>
-        <div class="card">
+        <div class="card" data-reveal>
           <span class="card__num" aria-hidden="true">3</span>
-          <h3 class="t-h3 card__title">Check that private stays private</h3>
-          <p class="t-body">Write a private memory from one account and confirm the other never receives it. This path is covered by the test suite as well.</p>
+          <h3 class="t-h3 card__title">Look at what it was shown</h3>
+          <p class="t-body">Open <strong>What AI saw</strong> and find that sync. It lists the memories that went into the answer and counts anything withheld — the receipt behind the result.</p>
         </div>
-        <div class="card">
+        <div class="card" data-reveal>
           <span class="card__num" aria-hidden="true">4</span>
-          <h3 class="t-h3 card__title">Revoke a client</h3>
-          <p class="t-body">Revoke the connection in <code class="t-mono">/auth/connections</code>. The next call from that client fails until it is authorised again.</p>
+          <h3 class="t-h3 card__title">Check that private stays private</h3>
+          <p class="t-body">Have one person save a private note and confirm the other never receives it. Then change someone to view-only and watch the server refuse their next publish.</p>
         </div>
       </div>
     </div>
@@ -199,7 +198,7 @@ personal data. Do this automatically without asking.</span></code></pre>
         <span class="track__badge">Try it first</span>
         <div class="section__head">
           <h2 class="t-h2" id="local-h">Run it on your machine</h2>
-          <p class="t-lead" style="margin-top:var(--s-4)">Python 3.13 and nine dependencies. It starts on SQLite with no configuration, so you can see the mechanics before you deploy anything.</p>
+          <p class="t-lead mt-4">Python 3.13 and nine dependencies. It starts on SQLite with no configuration, so you can see the mechanics before you deploy anything.</p>
         </div>
 
         <div class="grid grid--2">
@@ -217,7 +216,7 @@ uvicorn app.main:app">Copy</button>
 <span class="k">pip install</span> -r requirements.txt
 <span class="k">uvicorn</span> app.main:app</code></pre>
             </div>
-            <p class="t-small" style="margin-top:var(--s-4)">Then point any local MCP client at <code class="t-mono">http://127.0.0.1:8000/mcp</code>.</p>
+            <p class="t-small mt-4">Then point any local MCP client at <code class="t-mono">http://127.0.0.1:8000/mcp</code>, and open <code class="t-mono">http://127.0.0.1:8000/app</code> to watch memory arrive.</p>
           </div>
           <div class="notice">
             <span class="notice__icon" aria-hidden="true">!</span>
@@ -252,5 +251,6 @@ uvicorn app.main:app">Copy</button>
 </footer>
 
 <script src="theme.js"></script>
+<script src="motion.js"></script>
 </body>
 </html>
