@@ -277,7 +277,7 @@ def recent_changes(
 def get_source(
     store: SACStore, identity: RequestIdentity, source_id: str
 ) -> dict[str, Any]:
-    src = store.memories.get_source(identity.project_id, source_id)
+    src = store.memories.get_source(identity.project_id, source_id, identity.user_id)
     if src is None:
         return {"ok": False, "error": "source_not_found", "source_id": source_id}
     store.audit.emit(
@@ -310,11 +310,15 @@ def get_memory(
         return {"ok": False, "error": "memory_not_found", "memory_id": memory_id}
     result: dict[str, Any] = {"ok": True, "memory": mem.as_dict(include_details=True)}
     if include_relations:
-        result["relations"] = store.memories.get_relations(memory_id)
+        result["relations"] = store.memories.get_relations(
+            memory_id, identity.project_id, identity.user_id
+        )
     if include_versions:
         result["versions"] = [
             {"version": v["version"], "summary": v["summary"], "status": v["status"]}
-            for v in store.memories.get_versions(memory_id)
+            for v in store.memories.get_versions(
+                memory_id, identity.project_id, identity.user_id
+            )
         ]
     return result
 

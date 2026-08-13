@@ -171,11 +171,15 @@ if AUTH_ENABLED:
         body["client_id_metadata_document_supported"] = True
         return JSONResponse(body)
 
+    # Methods that mutate state need the write scope; everything else needs read.
+    _WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+
     @app.middleware("http")
     async def rest_bearer_auth(request: Request, call_next):
         # Protect /v1 with the same token verifier as the MCP surface.
         if request.url.path.startswith("/v1"):
             from .identity import Principal
+            from .models import READ_SCOPE, WRITE_SCOPE
 
             header = request.headers.get("authorization", "")
             token = header[7:].strip() if header.lower().startswith("bearer ") else ""
@@ -191,14 +195,49 @@ if AUTH_ENABLED:
                         )
                     },
                 )
+            scopes = tuple(access.scopes or ())
+            # Enforce the scopes the token was actually granted. Without this a
+            # read-only connection could write (audit finding).
+            required = (
+                WRITE_SCOPE if request.method in _WRITE_METHODS else READ_SCOPE
+            )
+            if required not in scopes:
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "insufficient_scope"},
+                    headers={
+                        "WWW-Authenticate": (
+                            f'Bearer error="insufficient_scope", scope="{required}"'
+                        )
+                    },
+                )
             claims = access.claims or {}
             request.state.principal = Principal(
                 user_id=access.subject or claims.get("user_id"),
                 agent_connection_id=claims.get("agent_connection_id"),
-                scopes=tuple(access.scopes or ()),
+                scopes=scopes,
                 label=claims.get("connection_label", ""),
             )
         return await call_next(request)
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    """Baseline hardening headers; authenticated HTML is never cached."""
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault(
+        "Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'"
+    )
+    if PUBLIC_URL.startswith("https://"):
+        response.headers.setdefault(
+            "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+        )
+    path = request.url.path
+    if path.startswith(("/console", "/auth", "/invite")):
+        response.headers.setdefault("Cache-Control", "no-store")
+    return response
 
 
 _STATUS = {

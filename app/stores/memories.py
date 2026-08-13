@@ -23,6 +23,13 @@ from ..db import (
 )
 from ..errors import ForbiddenError, NotFoundError, ValidationError
 from ..identity import RequestIdentity
+from ..limits import (
+    MAX_DETAILS_CHARS,
+    MAX_MEMORIES_PER_CONTEXT,
+    MAX_SUMMARY_CHARS,
+    MAX_TAG_CHARS,
+    MAX_TAGS,
+)
 from ..models import (
     AUTHORITY_WEIGHT,
     KIND_WEIGHT,
@@ -45,6 +52,30 @@ STOPWORDS = {
 def tokenize(text: str) -> set[str]:
     words = re.findall(r"[a-zA-Z0-9_\-]{3,}", (text or "").lower())
     return {w for w in words if w not in STOPWORDS}
+
+
+# Control characters, including newlines. Memory content is rendered into a
+# line-oriented context format, so a stored newline would let one member forge
+# the compiler's own section headers inside another member's prompt.
+_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f-\x9f  ]")
+
+
+def sanitize_line(value: str, limit: int) -> str:
+    """Collapse a value to a single safe line and cap its length."""
+    cleaned = _CONTROL_CHARS.sub(" ", value or "")
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    if len(cleaned) > limit:
+        cleaned = cleaned[: limit - 1].rstrip() + "…"
+    return cleaned
+
+
+def sanitize_block(value: str, limit: int) -> str:
+    """Keep newlines (details are never inlined) but drop other control chars."""
+    cleaned = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f  ]", " ", value or "")
+    cleaned = cleaned.strip()
+    if len(cleaned) > limit:
+        cleaned = cleaned[: limit - 1].rstrip() + "…"
+    return cleaned
 
 
 def _row_to_memory(m) -> MemoryRecord:
@@ -117,8 +148,11 @@ class MemoryStore:
         *,
         internal_kind: bool = False,
     ) -> dict[str, Any]:
-        summary = (summary or "").strip()
-        details = (details or "").strip()
+        # Sanitize before storing: memory content is attacker-influenced (any
+        # member can publish) and is rendered into a line-oriented context
+        # format read by other members' agents.
+        summary = sanitize_line(summary, MAX_SUMMARY_CHARS)
+        details = sanitize_block(details, MAX_DETAILS_CHARS)
         if not summary:
             raise ValidationError("summary must not be empty")
         if scope not in ("private", "shared"):
@@ -139,7 +173,12 @@ class MemoryStore:
         importance = max(0.0, min(float(importance), 1.0))
         confidence = max(0.0, min(float(confidence), 1.0))
         authority = "owner" if identity.role in ("owner", "admin") else "member"
-        tags = [str(t).strip() for t in (tags or []) if str(t).strip()]
+        # Tags are CSV-joined, so a comma inside one would fragment it.
+        tags = [
+            sanitize_line(str(t), MAX_TAG_CHARS).replace(",", " ")
+            for t in (tags or [])
+        ]
+        tags = [t for t in tags if t][:MAX_TAGS]
         supersedes = list(supersedes or [])
         contradicts = list(contradicts or [])
         project_id = identity.project_id
@@ -525,8 +564,21 @@ class MemoryStore:
                     break
         return pairs
 
-    def get_versions(self, memory_id: str) -> list[dict[str, Any]]:
+    def _can_see_memory(self, conn, project_id: str, memory_id: str, user_id: str) -> bool:
+        return conn.execute(
+            select(memories.c.id).where(
+                memories.c.id == memory_id,
+                _visible(project_id, user_id),
+            )
+        ).first() is not None
+
+    def get_versions(
+        self, memory_id: str, project_id: str, user_id: str
+    ) -> list[dict[str, Any]]:
+        """Version history — only for a memory the caller may see."""
         with self.engine.begin() as conn:
+            if not self._can_see_memory(conn, project_id, memory_id, user_id):
+                return []
             rows = conn.execute(
                 select(memory_versions)
                 .where(memory_versions.c.memory_id == memory_id)
@@ -534,26 +586,59 @@ class MemoryStore:
             ).all()
         return [dict(r._mapping) for r in rows]
 
-    def get_relations(self, memory_id: str) -> list[dict[str, Any]]:
+    def get_relations(
+        self, memory_id: str, project_id: str, user_id: str
+    ) -> list[dict[str, Any]]:
+        """Relations, filtered so neither endpoint leaks an invisible memory.
+
+        Without this, a relation would disclose the id of another member's
+        private memory (audit finding).
+        """
         with self.engine.begin() as conn:
+            if not self._can_see_memory(conn, project_id, memory_id, user_id):
+                return []
             rows = conn.execute(
                 select(memory_relations).where(
+                    memory_relations.c.project_id == project_id,
                     or_(
                         memory_relations.c.from_memory_id == memory_id,
                         memory_relations.c.to_memory_id == memory_id,
-                    )
+                    ),
                 )
             ).all()
-        return [dict(r._mapping) for r in rows]
+            visible: list[dict[str, Any]] = []
+            for r in rows:
+                m = dict(r._mapping)
+                other = (
+                    m["to_memory_id"]
+                    if m["from_memory_id"] == memory_id
+                    else m["from_memory_id"]
+                )
+                if self._can_see_memory(conn, project_id, other, user_id):
+                    visible.append(m)
+        return visible
 
     def get_source(
-        self, project_id: str, source_id: str
+        self, project_id: str, source_id: str, user_id: str
     ) -> dict[str, Any] | None:
+        """An evidence event, subject to the same visibility rules as memory.
+
+        Evidence carries the memory's content verbatim, so without the scope
+        check a member could read another member's private memory through it
+        (audit finding).
+        """
         with self.engine.begin() as conn:
             row = conn.execute(
                 select(evidence_events).where(
                     evidence_events.c.id == source_id,
                     evidence_events.c.project_id == project_id,
+                    or_(
+                        evidence_events.c.visibility_scope == "shared",
+                        and_(
+                            evidence_events.c.visibility_scope != "shared",
+                            evidence_events.c.owner_user_id == user_id,
+                        ),
+                    ),
                 )
             ).first()
         return dict(row._mapping) if row else None

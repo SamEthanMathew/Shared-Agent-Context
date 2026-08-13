@@ -27,6 +27,29 @@ def _secure(request: Request) -> bool:
     return request.url.scheme == "https"
 
 
+def _client_ip(request: Request) -> str:
+    fwd = request.headers.get("x-forwarded-for", "")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _rate_ok(request: Request, bucket: str, extra: str = "") -> bool:
+    """Fixed-window rate limit, keyed by bucket + client IP (+ optional field)."""
+    from ..limits import LIMITS, RateLimiter
+
+    limit, window = LIMITS.get(bucket, (30, 300))
+    key = f"{bucket}:{_client_ip(request)}:{extra}".lower()
+    return RateLimiter(get_store().engine).hit(key, limit, window)
+
+
+def _too_many(target: str) -> RedirectResponse:
+    return RedirectResponse(
+        f"{target}?error=Too+many+attempts.+Please+wait+and+try+again",
+        status_code=303,
+    )
+
+
 def _page(title: str, body: str) -> str:
     return f"""<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -49,12 +72,24 @@ def _current_user(request: Request) -> str | None:
 
 
 def _safe_next(next_url: str | None) -> str:
-    """Only allow same-site relative redirects — never an absolute URL."""
+    """Only allow same-site relative redirects — never an absolute URL.
+
+    Rejects protocol-relative forms. Note that browsers normalise a backslash
+    to a forward slash, so "/\\evil.com" would escape a naive "starts with /"
+    check; backslashes and control characters are refused outright.
+    """
     if not next_url:
         return ""
-    if next_url.startswith("/") and not next_url.startswith("//"):
-        return next_url
-    return ""
+    candidate = next_url.strip()
+    if not candidate.startswith("/"):
+        return ""
+    if candidate.startswith("//"):
+        return ""
+    if "\\" in candidate:
+        return ""
+    if any(ord(ch) < 0x20 or ord(ch) == 0x7F for ch in candidate):
+        return ""
+    return candidate
 
 
 def _post_login_target(txn: str, next_url: str) -> str:
@@ -89,6 +124,8 @@ def login_submit(
     txn: str = Form(""),
     next: str = Form(""),
 ):
+    if not _rate_ok(request, "login", email):
+        return _too_many("/auth/login")
     store = get_store()
     user = store.auth.verify_login(email, password)
     if not user:
@@ -148,6 +185,8 @@ def signup_submit(
 ):
     from .. import email as mailer
 
+    if not _rate_ok(request, "signup"):
+        return _too_many("/auth/signup")
     store = get_store()
     address = (email or "").strip().lower()
     nxt = _safe_next(next)
@@ -213,9 +252,11 @@ def forgot_form(sent: str = ""):
 
 
 @router.post("/auth/forgot")
-def forgot_submit(email: str = Form(...)):
+def forgot_submit(request: Request, email: str = Form(...)):
     from .. import email as mailer
 
+    if not _rate_ok(request, "forgot", email):
+        return _too_many("/auth/forgot")
     store = get_store()
     user = store.projects.get_user_by_email(email)
     if user:
@@ -409,6 +450,10 @@ def invite_accept(code: str, request: Request):
     from ..errors import SACError
 
     store = get_store()
+    if not _rate_ok(request, "invite_accept"):
+        return HTMLResponse(
+            _page("Slow down", "<h1>Too many attempts</h1>"), status_code=429
+        )
     uid = _current_user(request)
     if not uid:
         return RedirectResponse(f"/auth/login?next=/invite/{code}", status_code=303)

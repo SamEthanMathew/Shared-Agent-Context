@@ -22,7 +22,7 @@ def test_supersede_flips_status_and_records_relation(seed):
     assert old_now.superseded_by_id == new["memory"].id
     assert old_now.version == 2
 
-    versions = seed.store.memories.get_versions(old["memory"].id)
+    versions = seed.store.memories.get_versions(old["memory"].id, seed.project_id, seed.alice_user_id)
     assert {v["version"] for v in versions} == {1, 2}
 
     # compile candidates include only the active (new) one
@@ -31,7 +31,7 @@ def test_supersede_flips_status_and_records_relation(seed):
     assert old["memory"].id not in active_ids
 
     # a supersedes relation exists
-    rels = seed.store.memories.get_relations(new["memory"].id)
+    rels = seed.store.memories.get_relations(new["memory"].id, seed.project_id, seed.alice_user_id)
     assert any(r["relation_type"] == "supersedes" and r["to_memory_id"] == old["memory"].id for r in rels)
 
 

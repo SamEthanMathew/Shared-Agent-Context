@@ -66,9 +66,19 @@ def send(email: Email) -> bool:
                 logger.error("resend rejected message: %s %s", r.status_code, r.text[:200])
             except httpx.HTTPError as exc:
                 logger.error("resend request failed: %s", exc)
-    # console fallback — never log the whole body at info level in production,
-    # but the link matters for local development.
-    logger.info("[email:%s] to=%s subject=%s\n%s", provider, email.to, email.subject, email.text)
+    # Message bodies carry verification tokens, reset tokens, and invite codes.
+    # Only the explicit console backend (dev) prints them; if a real provider
+    # was configured and failed, log metadata only so secrets never reach
+    # production logs.
+    if provider == "console":
+        logger.info(
+            "[email:console] to=%s subject=%s\n%s", email.to, email.subject, email.text
+        )
+    else:
+        logger.error(
+            "[email:%s] delivery failed; body withheld. to=%s subject=%s",
+            provider, email.to, email.subject,
+        )
     return False
 
 
