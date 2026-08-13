@@ -76,6 +76,11 @@ services:
   # reaper inside the web process dies with every deploy and would run twice as
   # soon as there are two instances. Here its failures are visible and it cannot
   # slow a request. Idempotent, so a missed run simply catches up.
+  #
+  # NOTE: this deployment's services were created individually, not from this
+  # blueprint, so pushing a new service here does not create it — the reaper was
+  # created directly against the Render API to match what is declared below.
+  # Keep the two in step by hand until a blueprint is actually applied.
   - type: cron
     name: sac-reaper
     runtime: python

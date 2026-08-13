@@ -108,11 +108,15 @@ the web process dies with every deploy and runs twice as soon as there are two
 instances. Run `python scripts/reaper.py --dry-run` to see what a pass would
 remove without removing it.
 
-> **The cron job needs a blueprint re-sync to exist.** Render creates new
-> services only when the blueprint is applied, so an ordinary `git push` deploys
-> the web service and silently does not create the cron. In the dashboard:
-> **Blueprints → this blueprint → Sync**. Until that happens retention simply
-> never runs — nothing breaks, the tables just keep growing.
+> **A new service in `render.yaml` does not appear by itself.** Render creates
+> services from a blueprint only when the blueprint is applied, and this
+> deployment's services were created individually rather than from one — the
+> workspace has no blueprint registered at all. So an ordinary `git push`
+> redeploys what already exists and silently ignores anything newly declared
+> here. The reaper was therefore created directly against the Render API; the
+> declaration below is kept as the source of truth for its configuration. If you
+> ever adopt blueprints, apply this file once and Render will adopt the existing
+> services.
 
 | Data | Kept |
 |---|---|
