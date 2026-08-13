@@ -28,7 +28,10 @@ class Email:
 
 
 def _from_address() -> str:
-    return os.getenv("SAC_EMAIL_FROM", "Shared Agent Context <onboarding@resend.dev>")
+    # The fallback keeps Resend's shared test sender, which only delivers to the
+    # account owner's own address — a deployment that forgets SAC_EMAIL_FROM should
+    # fail visibly to everyone else rather than quietly send as the wrong product.
+    return os.getenv("SAC_EMAIL_FROM", "Osmos <onboarding@resend.dev>")
 
 
 def _public_url() -> str:
@@ -89,9 +92,9 @@ def send_verification(to: str, token: str) -> bool:
     link = f"{_public_url()}/auth/verify?token={token}"
     return send(Email(
         to=to,
-        subject="Verify your Shared Agent Context email",
+        subject="Verify your Osmos email",
         text=(
-            "Confirm your email address to finish setting up Shared Agent Context.\n\n"
+            "Confirm your email address to finish setting up Osmos.\n\n"
             f"{link}\n\nThis link expires in 24 hours. If you didn't sign up, ignore this."
         ),
     ))
@@ -101,7 +104,7 @@ def send_password_reset(to: str, token: str) -> bool:
     link = f"{_public_url()}/auth/reset?token={token}"
     return send(Email(
         to=to,
-        subject="Reset your Shared Agent Context password",
+        subject="Reset your Osmos password",
         text=(
             "Use this link to choose a new password.\n\n"
             f"{link}\n\nThis link expires in 1 hour. If you didn't request it, ignore this."
@@ -116,7 +119,8 @@ def send_invite(to: str, code: str, context_name: str, inviter: str, access: str
         subject=f"{inviter} shared the context '{context_name}' with you",
         text=(
             f"{inviter} gave you {access} access to the shared context "
-            f"'{context_name}' on Shared Agent Context.\n\n{link}\n\n"
+            f"'{context_name}' on Osmos — shared project memory for AI assistants.\n\n"
+            f"{link}\n\n"
             "Open the link to join. This invite expires in 14 days."
         ),
     ))

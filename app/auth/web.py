@@ -240,7 +240,7 @@ def login_form(
         '<p class="notice">Finish signing in to connect your AI client.</p>'
         if txn else ""
     )
-    body = f"""<h1>Sign in to Shared Agent Context</h1>{connecting}{err}
+    body = f"""<h1>Sign in to Osmos</h1>{connecting}{err}
 {_sso_buttons(carry)}
 <form method="post" action="/auth/login">
 <input type="hidden" name="txn" value="{html.escape(txn)}">
