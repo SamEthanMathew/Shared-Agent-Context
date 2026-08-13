@@ -108,6 +108,12 @@ the web process dies with every deploy and runs twice as soon as there are two
 instances. Run `python scripts/reaper.py --dry-run` to see what a pass would
 remove without removing it.
 
+> **The cron job needs a blueprint re-sync to exist.** Render creates new
+> services only when the blueprint is applied, so an ordinary `git push` deploys
+> the web service and silently does not create the cron. In the dashboard:
+> **Blueprints → this blueprint → Sync**. Until that happens retention simply
+> never runs — nothing breaks, the tables just keep growing.
+
 | Data | Kept |
 |---|---|
 | **Memory** (shared and private) | **Indefinitely.** Retention never touches the product's actual content. |
