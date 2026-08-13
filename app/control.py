@@ -85,6 +85,12 @@ def home(request: Request):
         '<p class="notice">Verify your email to create contexts or accept '
         "invitations. Check your inbox for the link.</p>"
     )
+    # The console is now the fallback surface; point people at the real app.
+    notice = (
+        '<p class="notice">This is the basic console. '
+        '<a href="/app">Open the Osmos app</a> for context switching, sharing, '
+        "and what your agents were shown.</p>" + notice
+    )
 
     connections = store.projects.list_connections(uid)
     conn_rows = ""

@@ -1,0 +1,20 @@
+{
+  "name": "osmos-web",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Osmos web app. Built output is committed to app/static/app so the Python deploy needs no Node toolchain.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5.0.4",
+    "vite": "^7.1.12"
+  }
+}

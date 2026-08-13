@@ -14,3 +14,8 @@ website/research/source-extracts/
 .coverage
 .coverage.*
 htmlcov/
+
+# Front-end dependencies. NOTE: web/ build output in app/static/app IS committed
+# on purpose, so the Python deploy needs no Node toolchain — see web/README.md.
+web/node_modules/
+node_modules/

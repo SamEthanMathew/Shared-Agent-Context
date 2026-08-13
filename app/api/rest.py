@@ -11,7 +11,7 @@ from typing import Any
 
 from fastapi import APIRouter, Request
 
-from ..errors import ForbiddenError
+from ..errors import ForbiddenError, NotFoundError
 from ..identity import Principal, RequestIdentity
 from ..runtime import get_store
 from . import impl, sharing
@@ -25,6 +25,7 @@ from .schemas import (
     RememberRequest,
     ShareRequest,
     SyncRequest,
+    UseContextRequest,
 )
 
 router = APIRouter(prefix="/v1")
@@ -326,6 +327,118 @@ def recent_changes(
 def get_source(project_id: str, source_id: str, request: Request) -> dict[str, Any]:
     identity = _identity(request, project_id)
     return impl.get_source(get_store(), identity, source_id)
+
+
+@router.post(
+    "/projects/{project_id}/memories/{memory_id}/retract",
+    operation_id="retract_memory",
+)
+def retract_memory(project_id: str, memory_id: str, request: Request) -> dict[str, Any]:
+    """Withdraw a memory so it stops reaching agents. History is retained."""
+    store = get_store()
+    identity = _identity(request, project_id)
+    store.memories.retract(identity, memory_id)
+    return {"ok": True, "memory_id": memory_id, "retracted": True}
+
+
+# Emitted once per sync and per source read. They are the highest-volume events
+# by far, and would bury the governance history the feed exists to show. The
+# per-sync detail has its own surface: /contexts/{id}/snapshots.
+_HIGH_VOLUME_ACTIONS = frozenset({"context.compile", "source.read"})
+
+
+@router.get("/contexts/{context_id}/activity", operation_id="list_activity")
+def list_activity(context_id: str, request: Request, limit: int = 50) -> dict[str, Any]:
+    """The audit feed for a context: who shared, changed access, archived."""
+    store = get_store()
+    identity = _identity(request, context_id)
+    # Over-fetch, because filtering after the limit would return a short page.
+    events = [
+        e
+        for e in store.audit.recent(context_id, limit=min(limit * 4, 500))
+        if e["action"] not in _HIGH_VOLUME_ACTIONS
+    ][:limit]
+    people = store.projects.get_users_map(
+        [e["actor_user_id"] for e in events if e["actor_user_id"]]
+    )
+    return {
+        "ok": True,
+        "events": [
+            {
+                "id": e["id"],
+                "action": e["action"],
+                "entity_type": e["entity_type"],
+                "actor": (people.get(e["actor_user_id"]) or {}).get(
+                    "email", e["actor_user_id"]
+                ),
+                "meta": e["meta"],
+                "created_at": e["created_at"].isoformat() if e["created_at"] else None,
+            }
+            for e in events
+        ],
+    }
+
+
+# --- connected AI clients ---------------------------------------------------
+
+
+@router.get("/connections", operation_id="list_connections")
+def list_connections(request: Request) -> dict[str, Any]:
+    """The caller's AI clients, and which context each one is working in."""
+    store = get_store()
+    principal = _principal(request)
+    names = {
+        c["id"]: c["name"] for c in store.projects.list_user_contexts(principal.user_id)
+    }
+    out = []
+    for conn in store.projects.list_connections(principal.user_id):
+        bound = store.projects.get_binding(principal.user_id, conn["id"], None)
+        out.append({
+            "id": conn["id"],
+            "label": conn["label"],
+            "provider": conn["provider_hint"],
+            "revoked": conn["revoked_at"] is not None,
+            "last_seen_at": (
+                conn["last_seen_at"].isoformat() if conn.get("last_seen_at") else None
+            ),
+            "context_id": bound,
+            "context_name": names.get(bound or "", ""),
+        })
+    return {"ok": True, "connections": out}
+
+
+@router.post("/connections/{conn_id}/revoke", operation_id="revoke_connection")
+def revoke_connection(conn_id: str, request: Request) -> dict[str, Any]:
+    store = get_store()
+    principal = _principal(request)
+    conn = store.projects.get_agent_connection(conn_id)
+    if conn is None or conn["user_id"] != principal.user_id:
+        raise NotFoundError("connection not found")
+    store.projects.revoke_agent_connection(conn_id)
+    return {"ok": True, "revoked": True}
+
+
+@router.put("/connections/{conn_id}/context", operation_id="set_connection_context")
+def set_connection_context(
+    conn_id: str, payload: UseContextRequest, request: Request
+) -> dict[str, Any]:
+    """Point one AI client at a context, from the web app.
+
+    The equivalent of the agent calling ``sac_use_context``, so a person can
+    move a client without having to ask their assistant to do it.
+    """
+    store = get_store()
+    principal = _principal(request)
+    conn = store.projects.get_agent_connection(conn_id)
+    if conn is None or conn["user_id"] != principal.user_id:
+        raise NotFoundError("connection not found")
+    # resolve_context_ref scopes to the caller's memberships, so a raw id
+    # belonging to someone else cannot be bound here.
+    project_id = store.projects.resolve_context_ref(
+        principal.user_id, payload.context
+    )
+    store.projects.set_binding(principal.user_id, project_id, conn_id)
+    return {"ok": True, "connection_id": conn_id, "context_id": project_id}
 
 
 @router.post("/contexts/{context_id}/archive", operation_id="archive_context")

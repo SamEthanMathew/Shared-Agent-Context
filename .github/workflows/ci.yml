@@ -64,6 +64,29 @@ jobs:
           SAC_PID=$!
           trap 'kill $SAC_PID 2>/dev/null || true' EXIT
           python tests/smoke_http_mcp.py || (cat /tmp/sac-uvicorn.log && exit 1)
+      # The web app's build output is committed so the deploy needs no Node
+      # toolchain (web/README.md). The risk that buys is silent drift: a source
+      # change shipped without its rebuild. Rebuild here and fail if the tree
+      # would change.
+      - name: Check the committed web build matches its source
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Rebuild the web app and diff
+        run: |
+          cd web
+          npm ci
+          npm run build
+          cd ..
+          if ! git diff --quiet -- app/static/app; then
+            echo "::error::app/static/app is stale. Run 'npm run build' in web/ and commit the result."
+            git diff --stat -- app/static/app
+            exit 1
+          fi
+          echo "web build is current"
+
       - name: Run OAuth end-to-end test (auth mode)
         env:
           PYTHONPATH: .

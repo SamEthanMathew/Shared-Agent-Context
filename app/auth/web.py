@@ -116,10 +116,19 @@ def _safe_next(next_url: str | None) -> str:
     return candidate
 
 
+HOME = "/app"
+
+
 def _post_login_target(txn: str, next_url: str) -> str:
+    """Where to land after a successful sign-in.
+
+    A pending OAuth transaction wins: the user came here to connect a client, so
+    finishing that is the whole point. Otherwise an explicit `next` (an invite or
+    share link they were following), and failing both, the web app.
+    """
     if txn:
         return f"/auth/consent?txn={txn}"
-    return _safe_next(next_url) or "/console"
+    return _safe_next(next_url) or HOME
 
 
 def _carry(txn: str, next_url: str) -> str:

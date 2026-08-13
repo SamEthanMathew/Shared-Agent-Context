@@ -1,0 +1,8 @@
+# The web app's build output is committed (see web/README.md) and CI verifies it
+# by rebuilding and diffing. Line-ending normalisation would make that diff fail
+# on any OS that checks out differently from the one that built it, so these
+# files are stored byte-for-byte.
+app/static/app/** -text
+
+# Same reasoning for the lockfile the CI build depends on.
+web/package-lock.json text eol=lf

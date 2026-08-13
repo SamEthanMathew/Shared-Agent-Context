@@ -17,6 +17,7 @@ from .auth.web import router as auth_router
 from .control import router as console_router
 from .errors import ConflictError, ForbiddenError, NotFoundError, SACError, ValidationError
 from .runtime import get_store
+from .webapp import router as webapp_router
 
 MCP_INSTRUCTIONS = """
 Shared Agent Context (SAC) is always-on shared project memory. Knowledge is
@@ -145,6 +146,8 @@ app = FastAPI(
 app.include_router(v1_router)
 app.include_router(auth_router)
 app.include_router(console_router)
+# The web app, before the root MCP mount which is a catch-all.
+app.include_router(webapp_router)
 
 
 if AUTH_ENABLED:

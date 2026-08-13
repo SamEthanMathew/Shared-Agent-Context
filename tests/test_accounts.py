@@ -49,7 +49,7 @@ def test_signup_creates_account_and_logs_in(web, monkeypatch):
     box = _sent(monkeypatch)
     r = c.post("/auth/signup", data={"email": "new@example.com", "password": "a-good-password"})
     assert r.status_code == 303
-    assert r.headers["location"] == "/console"
+    assert r.headers["location"] == "/app"
     assert c.cookies.get("sac_session")
     user = seed.store.projects.get_user_by_email("new@example.com")
     assert user is not None
@@ -226,7 +226,7 @@ def test_login_next_param_only_allows_relative(web, seed):
         "next": "https://evil.example.net/steal",
     })
     # open redirect refused; falls back to the console
-    assert r.headers["location"] == "/console"
+    assert r.headers["location"] == "/app"
 
 
 def test_login_next_param_honours_relative_path(web, seed):

@@ -1,0 +1,201 @@
+/* Connected AI clients.
+ *
+ * This is where "multiple accounts connected" becomes concrete: each Claude or
+ * ChatGPT connection is listed with the context it is currently working in, and
+ * that context can be changed here — the click-driven equivalent of asking the
+ * agent to call sac_use_context.
+ */
+import { useCallback, useEffect, useState } from 'react'
+
+import { api } from '../api.js'
+import { Loading, when } from '../components.jsx'
+
+export default function ClientsView({ contexts, toast }) {
+  const [connections, setConnections] = useState(null)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState('')
+
+  const load = useCallback(async () => {
+    try {
+      const out = await api.connections()
+      setConnections(out.connections)
+    } catch (err) {
+      setError(err.message)
+    }
+  }, [])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  if (error) return <div className="page"><div className="notice error">{error}</div></div>
+  if (!connections) return <Loading label="Reading connected clients" />
+
+  const active = connections.filter((c) => !c.revoked)
+  const revoked = connections.filter((c) => c.revoked)
+
+  return (
+    <div className="page">
+      <div className="page-head">
+        <div className="grow">
+          <h1>AI clients</h1>
+          <p className="sub">
+            Every Claude, ChatGPT, or other MCP client you have connected, and
+            which context each one is working in.
+          </p>
+        </div>
+      </div>
+
+      {active.length === 0 ? (
+        <ConnectGuide />
+      ) : (
+        <div className="card">
+          <div className="list">
+            {active.map((conn) => (
+              <div className="item" key={conn.id}>
+                <div className="item-head">
+                  <span className="item-title">{conn.label || 'MCP client'}</span>
+                  {conn.provider ? (
+                    <span className="badge">{conn.provider}</span>
+                  ) : null}
+                  {conn.last_seen_at ? (
+                    <span className="tiny">seen {when(conn.last_seen_at)}</span>
+                  ) : null}
+                </div>
+
+                <div className="row" style={{ marginTop: 8, flexWrap: 'wrap' }}>
+                  <label
+                    htmlFor={`ctx-${conn.id}`}
+                    style={{ margin: 0, minWidth: 88 }}
+                  >
+                    Working in
+                  </label>
+                  <select
+                    id={`ctx-${conn.id}`}
+                    value={conn.context_id || ''}
+                    disabled={busy === conn.id}
+                    onChange={async (event) => {
+                      setBusy(conn.id)
+                      try {
+                        await api.setConnectionContext(conn.id, event.target.value)
+                        await load()
+                        toast('Client moved')
+                      } catch (err) {
+                        toast(err.message, 'error')
+                      } finally {
+                        setBusy('')
+                      }
+                    }}
+                    style={{ width: 'auto', minWidth: 220 }}
+                  >
+                    <option value="" disabled>
+                      Not set — the agent will ask
+                    </option>
+                    {contexts.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  <div className="topbar-spacer" />
+                  <button
+                    className="btn danger sm"
+                    onClick={async () => {
+                      if (
+                        !window.confirm(
+                          `Revoke "${conn.label}"? It loses access until you reconnect it.`
+                        )
+                      )
+                        return
+                      try {
+                        await api.revokeConnection(conn.id)
+                        await load()
+                        toast('Connection revoked')
+                      } catch (err) {
+                        toast(err.message, 'error')
+                      }
+                    }}
+                  >
+                    Revoke
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {active.length > 0 ? (
+        <div style={{ marginTop: 24 }}>
+          <ConnectGuide compact />
+        </div>
+      ) : null}
+
+      {revoked.length ? (
+        <div className="card" style={{ marginTop: 24 }}>
+          <div className="card-head">
+            <h2>Revoked</h2>
+          </div>
+          <div className="list">
+            {revoked.map((c) => (
+              <div className="item" key={c.id}>
+                <span className="sub">{c.label || c.id}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function ConnectGuide({ compact = false }) {
+  const url = `${window.location.origin}/mcp`
+  return (
+    <div className={compact ? 'card tight' : 'card'}>
+      <div className="card-head">
+        <h2>{compact ? 'Connect another client' : 'Connect your first AI client'}</h2>
+      </div>
+      {!compact ? (
+        <p className="sub" style={{ marginTop: 0 }}>
+          Osmos works through MCP, so the same context reaches whichever assistant
+          you use.
+        </p>
+      ) : null}
+      <div className="link-copy" style={{ marginBottom: 16 }}>
+        <input readOnly value={url} aria-label="MCP server URL" />
+        <button
+          className="btn sm"
+          onClick={() => navigator.clipboard?.writeText(url)}
+        >
+          Copy
+        </button>
+      </div>
+      <div className="table-wrap">
+        <table>
+          <tbody>
+            <tr>
+              <td style={{ width: 96 }}>
+                <strong style={{ fontWeight: 500 }}>Claude</strong>
+              </td>
+              <td className="tiny">
+                Settings → Connectors → Add custom connector → paste the URL
+                above. Sign in when it asks, then approve access.
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <strong style={{ fontWeight: 500 }}>ChatGPT</strong>
+              </td>
+              <td className="tiny">
+                Settings → Apps → Advanced → Developer mode → add a connector
+                with the URL above and OAuth authentication.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}

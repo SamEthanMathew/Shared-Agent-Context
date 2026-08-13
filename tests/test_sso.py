@@ -275,7 +275,7 @@ def test_a_successful_callback_signs_the_user_in(web, monkeypatch):
 
     r = c.get(f"/auth/sso/google/callback?code=abc&state={state}")
     assert r.status_code == 303
-    assert r.headers["location"] == "/console"
+    assert r.headers["location"] == "/app"
     assert c.cookies.get("sac_session")
     user = seed.store.projects.get_user_by_email("webuser@example.com")
     assert user is not None

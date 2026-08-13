@@ -9,10 +9,15 @@ never verify it, and silently receive any context later shared to that address.
 An unverified account must therefore be treated as no account at all: the share
 becomes an invite, and only whoever can read the mailbox can redeem it.
 
-**Redundant verification.** The mirror image: an invite emailed to an address
-and redeemed by an account with that same address *is* proof of mailbox
-control. Demanding a separate verification click afterwards asked the user to
-prove the same fact twice, and blocked the main way people join.
+**The verification step that looks redundant but isn't.** It is tempting to
+treat redeeming an invite as proof of mailbox control — the code was emailed to
+that address, after all — and skip verification. It is not proof, because
+``share_context`` hands the link to the *sharer* too, so links can be delivered
+by hand when email is unavailable. Removing the gate would let someone invite an
+address, register it, redeem their own code, and walk away holding a verified
+account for a mailbox they never controlled — which the sharing path above then
+trusts. The two halves of this file are therefore in tension by design, and both
+directions are pinned.
 """
 from __future__ import annotations
 
@@ -181,14 +186,14 @@ def test_the_signup_page_carries_the_transaction_back_to_login(web):
     assert f"/auth/login?txn={txn}" in body
 
 
-def test_signing_up_without_a_transaction_still_lands_on_the_console(web):
+def test_signing_up_without_a_transaction_lands_in_the_app(web):
     c, _ = web
     r = c.post(
         "/auth/signup",
         data={"email": "plain@example.com", "password": "correct-horse-battery"},
     )
     assert r.status_code == 303
-    assert r.headers["location"] == "/console"
+    assert r.headers["location"] == "/app"
 
 
 def test_an_existing_user_signing_up_mid_oauth_keeps_the_transaction(web):

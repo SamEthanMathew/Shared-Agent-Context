@@ -24,6 +24,12 @@ class AccessRequest(BaseModel):
     access: AccessLevel
 
 
+class UseContextRequest(BaseModel):
+    """Which context to point at. Accepts a name, slug, or id."""
+
+    context: str = Field(..., min_length=1)
+
+
 class LinkAccessRequest(BaseModel):
     """`manage` is absent from LinkAccess by design — a link cannot re-share."""
 
