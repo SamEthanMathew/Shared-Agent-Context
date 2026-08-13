@@ -15,8 +15,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from .. import email as mailer
 from ..errors import ConflictError, ForbiddenError, NotFoundError, ValidationError
 from ..identity import RequestIdentity
+from ..limits import MAX_MEMBERS_PER_CONTEXT, enforce_quota, require_verified
 from ..models import ACCESS_TO_ROLE, ROLE_TO_ACCESS, SHARER_ROLES
 from ..stores import SACStore
 
@@ -24,6 +26,13 @@ from ..stores import SACStore
 def _require_sharer(identity: RequestIdentity) -> None:
     if identity.role not in SHARER_ROLES:
         raise ForbiddenError("only owners and admins can share this context")
+
+
+def _display_name(store: SACStore, user_id: str) -> str:
+    user = store.projects.get_user(user_id)
+    if not user:
+        return "Someone"
+    return user.get("display_name") or user.get("email") or "Someone"
 
 
 def _role_for(access: str) -> str:
@@ -57,11 +66,20 @@ def share_context(
         raise ValidationError("email is required")
     role = _role_for(access)
 
+    enforce_quota(
+        store,
+        len(store.projects.list_members(identity.project_id)),
+        MAX_MEMBERS_PER_CONTEXT,
+        "members per context",
+    )
+    inviter = _display_name(store, identity.user_id)
+
     existing_user = store.projects.get_user_by_email(email)
     if existing_user:
         if existing_user["id"] == identity.user_id:
             raise ValidationError("you already have access to this context")
         store.projects.add_membership(identity.project_id, existing_user["id"], role=role)
+        mailer.send_share_notice(email, identity.context_name, inviter, access)
         store.audit.emit(
             "context.share", "membership", existing_user["id"],
             project_id=identity.project_id, actor_user_id=identity.user_id,
@@ -81,6 +99,7 @@ def share_context(
         identity.project_id, role=role,
         created_by_user_id=identity.user_id, email=email,
     )
+    mailer.send_invite(email, code, identity.context_name, inviter, access)
     store.audit.emit(
         "context.invite", "invite", invite_id,
         project_id=identity.project_id, actor_user_id=identity.user_id,
@@ -102,6 +121,7 @@ def share_context(
 
 def accept_invite(store: SACStore, code: str, user_id: str) -> dict[str, Any]:
     """Redeem an invite for an existing (already signed-in) user."""
+    require_verified(store, user_id, "accept a shared context")
     invite = store.invites.get_by_code(code)
     if invite is None:
         raise NotFoundError("this invite is invalid, expired, or already used")

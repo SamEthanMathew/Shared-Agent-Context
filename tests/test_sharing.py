@@ -96,6 +96,7 @@ def test_accept_invite_grants_access(seed):
     )
     code = out["invite_link"].rsplit("/", 1)[1]
     newcomer = seed.store.projects.create_user("newcomer@example.com", "New")
+    seed.store.auth.mark_email_verified(newcomer)
     result = sharing.accept_invite(seed.store, code, newcomer)
     assert result["ok"] is True
     assert result["access"] == "edit"
@@ -109,8 +110,10 @@ def test_invite_is_single_use(seed):
     )
     code = out["invite_link"].rsplit("/", 1)[1]
     newcomer = seed.store.projects.create_user("newcomer@example.com", "New")
+    seed.store.auth.mark_email_verified(newcomer)
     sharing.accept_invite(seed.store, code, newcomer)
     other = seed.store.projects.create_user("other@example.com", "Other")
+    seed.store.auth.mark_email_verified(other)
     with pytest.raises(NotFoundError):
         sharing.accept_invite(seed.store, code, other)
 
@@ -122,6 +125,7 @@ def test_invite_bound_to_its_email(seed):
     )
     code = out["invite_link"].rsplit("/", 1)[1]
     interloper = seed.store.projects.create_user("interloper@example.com", "X")
+    seed.store.auth.mark_email_verified(interloper)
     with pytest.raises(ForbiddenError):
         sharing.accept_invite(seed.store, code, interloper)
 
@@ -134,12 +138,14 @@ def test_revoked_invite_cannot_be_accepted(seed):
     code = out["invite_link"].rsplit("/", 1)[1]
     seed.store.invites.revoke(out["invite_id"])
     newcomer = seed.store.projects.create_user("newcomer@example.com", "New")
+    seed.store.auth.mark_email_verified(newcomer)
     with pytest.raises(NotFoundError):
         sharing.accept_invite(seed.store, code, newcomer)
 
 
 def test_bad_code_rejected(seed):
     newcomer = seed.store.projects.create_user("newcomer@example.com", "New")
+    seed.store.auth.mark_email_verified(newcomer)
     with pytest.raises(NotFoundError):
         sharing.accept_invite(seed.store, "not-a-real-code", newcomer)
 

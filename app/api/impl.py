@@ -6,8 +6,9 @@ from __future__ import annotations
 from typing import Any
 
 from ..context import compile_context
-from ..errors import ForbiddenError, ValidationError
+from ..errors import ValidationError
 from ..identity import Principal, RequestIdentity
+from ..limits import MAX_CONTEXTS_PER_USER, enforce_quota, require_verified
 from ..models import ROLE_TO_ACCESS
 from ..stores import SACStore
 
@@ -36,7 +37,18 @@ def create_context(
     description: str = "",
     make_active: bool = True,
 ) -> dict[str, Any]:
-    """Create a context, make the caller its owner, and select it."""
+    """Create a context, make the caller its owner, and select it.
+
+    Requires a verified email: it is the cheapest effective control against
+    throwaway accounts creating contexts in bulk.
+    """
+    require_verified(store, principal.user_id, "create a context")
+    enforce_quota(
+        store,
+        len(store.projects.list_user_contexts(principal.user_id)),
+        MAX_CONTEXTS_PER_USER,
+        "contexts",
+    )
     project = store.projects.create_project(
         name, owner_user_id=principal.user_id, description=description
     )
