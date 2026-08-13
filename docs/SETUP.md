@@ -1,4 +1,7 @@
-# SAC — Deploy & Connect Runbook
+# Osmos — Deploy & Connect Runbook
+
+**Live at https://withosmos.com** — connect an AI client at
+`https://withosmos.com/mcp`.
 
 Operational guide for the deployed service: multiple named **shared contexts**,
 private/shared memory scopes, server-enforced permissions, sharing by email, and
@@ -225,6 +228,26 @@ clients) are unaffected.
 Backed by PostgreSQL on Render / SQLite locally. Identity, membership, private
 vs shared scope, and permission filtering are enforced **before** any memory
 reaches a model.
+
+## The public URL is load-bearing
+
+`SAC_PUBLIC_URL` is the **OAuth issuer**, and it is baked into every client
+connection. Changing it invalidates existing tokens: every connected Claude and
+ChatGPT has to be re-added. That is cheap with two users and expensive with two
+hundred, which is why the custom domain was settled before onboarding rather
+than after.
+
+DNS lives in Cloudflare. The two Render records are **DNS-only, never proxied** —
+Render issues its own certificate, and Cloudflare's proxy in front of it blocks
+the ACME challenge, producing a site that will not load with no obvious cause.
+
+| Record | Points at | Purpose |
+|---|---|---|
+| `withosmos.com` CNAME | the Render host | The app (Cloudflare flattens CNAME at apex) |
+| `www` CNAME | the Render host | 301s to the apex |
+| `resend._domainkey` TXT | Resend DKIM key | Proves mail is genuinely from us |
+| `send` TXT | `v=spf1 include:amazonses.com ~all` | SPF |
+| `send` MX | `feedback-smtp.us-east-1.amazonses.com` | Bounce handling |
 
 ## Environment variables
 
