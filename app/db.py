@@ -79,19 +79,29 @@ users = Table(
     Column("is_admin", Integer, nullable=False, default=0),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("disabled_at", DateTime(timezone=True), nullable=True),
+    # Account lifecycle (public signup). Unverified users may sign in and read
+    # but cannot create contexts or accept shares.
+    Column("email_verified_at", DateTime(timezone=True), nullable=True),
+    Column("last_login_at", DateTime(timezone=True), nullable=True),
+    Column("failed_login_count", Integer, nullable=False, default=0),
+    Column("locked_until", DateTime(timezone=True), nullable=True),
 )
 
+# A "context" in user-facing terms. Internally it stays `projects` — see
+# docs/SETUP.md for the terminology note.
 projects = Table(
     "projects",
     metadata,
     Column("id", String(36), primary_key=True),
     Column("name", String(255), nullable=False),
+    Column("slug", String(120), nullable=True, unique=True),
     Column("description", Text, nullable=False, default=""),
     Column("owner_user_id", String(36), ForeignKey("users.id"), nullable=False),
     Column("context_revision", Integer, nullable=False, default=0),
     Column("settings", JSON, nullable=False, default=dict),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("updated_at", DateTime(timezone=True), nullable=False),
+    Column("archived_at", DateTime(timezone=True), nullable=True),
 )
 
 memberships = Table(
@@ -121,6 +131,28 @@ agent_connections = Table(
     Column("last_seen_at", DateTime(timezone=True), nullable=True),
     Column("revoked_at", DateTime(timezone=True), nullable=True),
     Index("ix_agent_conn_user", "user_id"),
+)
+
+# Which context a client (and optionally one specific chat) is working in.
+# client_session_ref IS NULL  -> the connection's default context.
+# client_session_ref set      -> that one chat is pinned, so two chats on the
+#                                same connector can work in different contexts.
+context_bindings = Table(
+    "context_bindings",
+    metadata,
+    Column("id", String(36), primary_key=True),
+    Column("user_id", String(36), ForeignKey("users.id"), nullable=False),
+    Column("agent_connection_id", String(36), nullable=True),
+    Column("client_session_ref", String(128), nullable=True),
+    Column("project_id", String(36), ForeignKey("projects.id"), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+    UniqueConstraint(
+        "user_id",
+        "agent_connection_id",
+        "client_session_ref",
+        name="uq_context_binding",
+    ),
+    Index("ix_bindings_user", "user_id"),
 )
 
 sessions = Table(
@@ -366,4 +398,56 @@ login_sessions = Table(
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("expires_at", DateTime(timezone=True), nullable=False),
     Column("revoked_at", DateTime(timezone=True), nullable=True),
+)
+
+# --- Sharing, account lifecycle, abuse control ------------------------------
+
+# A share to an email address that may not have an account yet. Codes are
+# stored hashed, like tokens.
+invites = Table(
+    "invites",
+    metadata,
+    Column("id", String(36), primary_key=True),
+    Column("project_id", String(36), ForeignKey("projects.id"), nullable=False),
+    Column("email", String(255), nullable=True),
+    Column("code_hash", String(64), nullable=False, unique=True),
+    Column("role", String(24), nullable=False, default="member"),
+    Column("created_by_user_id", String(36), nullable=False),
+    Column("expires_at", DateTime(timezone=True), nullable=False),
+    Column("max_uses", Integer, nullable=False, default=1),
+    Column("used_count", Integer, nullable=False, default=0),
+    Column("accepted_at", DateTime(timezone=True), nullable=True),
+    Column("accepted_by_user_id", String(36), nullable=True),
+    Column("revoked_at", DateTime(timezone=True), nullable=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Index("ix_invites_project", "project_id"),
+    Index("ix_invites_email", "email"),
+    CheckConstraint(
+        "role IN ('owner','admin','member','viewer')", name="ck_invite_role"
+    ),
+)
+
+# Email verification and password reset.
+email_tokens = Table(
+    "email_tokens",
+    metadata,
+    Column("id", String(36), primary_key=True),
+    Column("user_id", String(36), ForeignKey("users.id"), nullable=False),
+    Column("kind", String(16), nullable=False),  # verify | reset
+    Column("token_hash", String(64), nullable=False, unique=True),
+    Column("expires_at", DateTime(timezone=True), nullable=False),
+    Column("used_at", DateTime(timezone=True), nullable=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Index("ix_email_tokens_user", "user_id"),
+    CheckConstraint("kind IN ('verify','reset')", name="ck_email_token_kind"),
+)
+
+# Fixed-window counters for rate limiting and quotas. A table is sufficient at
+# this scale; no Redis dependency.
+rate_events = Table(
+    "rate_events",
+    metadata,
+    Column("key", String(255), primary_key=True),
+    Column("window_start", DateTime(timezone=True), primary_key=True),
+    Column("count", Integer, nullable=False, default=0),
 )
