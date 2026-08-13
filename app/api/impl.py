@@ -330,5 +330,5 @@ def status(store: SACStore, identity: RequestIdentity) -> dict[str, Any]:
         "project_id": identity.project_id,
         "revision": store.current_revision(identity.project_id),
         "memory_count": counts["shared_active"] + counts["private_mine"],
-        "mode": "v1_core_engine",
+        "mode": "v2_multi_context",
     }

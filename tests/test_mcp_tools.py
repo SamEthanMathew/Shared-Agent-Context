@@ -22,7 +22,7 @@ def test_all_tools_and_handoff(wired):
     # sac_status as alice
     res = _call(mcp, "sac_status", {"actor_email": "alice@example.com"})
     assert not res.is_error
-    assert res.structured_content["mode"] == "v1_core_engine"
+    assert res.structured_content["mode"] == "v2_multi_context"
 
     # sac_project_info
     res = _call(mcp, "sac_project_info", {"actor_email": "alice@example.com"})

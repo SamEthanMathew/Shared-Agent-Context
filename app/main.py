@@ -262,7 +262,7 @@ def health() -> dict[str, Any]:
     store = get_store()
     return {
         "ok": True,
-        "mode": "v1_core_engine",
+        "mode": "v2_multi_context",
         "auth": AUTH_ENABLED,
         "users": store.projects.count_users(),
     }
