@@ -33,6 +33,18 @@ services:
         value: claude.ai,claude.com,chatgpt.com,openai.com
       - key: SAC_CIMD_ALLOWED_HOSTS
         value: chatgpt.com,openai.com
+      # Unverified accounts can read but not create contexts or accept shares.
+      - key: SAC_REQUIRE_VERIFIED_EMAIL
+        value: "1"
+      # Outbound email. Without a provider key SAC still works, but verification
+      # and invite links are only written to the logs — set these before opening
+      # signup to real users.
+      - key: SAC_EMAIL_PROVIDER
+        value: console
+      - key: SAC_EMAIL_FROM
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
       # Set these in the Render dashboard (sync:false keeps them out of git).
       - key: SAC_BOOTSTRAP_ADMIN_EMAIL
         sync: false
