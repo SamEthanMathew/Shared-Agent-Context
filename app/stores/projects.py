@@ -511,19 +511,33 @@ class ProjectStore:
     def resolve_identity(
         self, principal: Principal, project_id: str
     ) -> RequestIdentity:
-        """Resolve a principal's role in a project, or refuse.
+        """Resolve a principal's role in a context, or refuse.
 
         Raises ForbiddenError for non-members — the surface must return 403
-        without revealing whether the project exists (project isolation).
+        without revealing whether the context exists (project isolation). Also
+        loads the context's display name/slug in the same query so every
+        response can state which context it is operating in.
         """
-        role = self.get_role(project_id, principal.user_id)
-        if role is None:
-            raise ForbiddenError("not a member of this project")
+        with self.engine.begin() as conn:
+            row = conn.execute(
+                select(memberships.c.role, projects.c.name, projects.c.slug)
+                .select_from(
+                    memberships.join(projects, memberships.c.project_id == projects.c.id)
+                )
+                .where(
+                    memberships.c.project_id == project_id,
+                    memberships.c.user_id == principal.user_id,
+                )
+            ).first()
+        if row is None:
+            raise ForbiddenError("not a member of this context")
         return RequestIdentity(
             user_id=principal.user_id,
             agent_connection_id=principal.agent_connection_id,
             project_id=project_id,
-            role=role,
+            role=row.role,
             scopes=principal.scopes,
             label=principal.label,
+            context_name=row.name,
+            context_slug=row.slug or "",
         )

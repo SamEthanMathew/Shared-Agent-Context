@@ -40,8 +40,27 @@ def _identity(request: Request, project_id: str) -> RequestIdentity:
 # --- projects & membership --------------------------------------------------
 
 
+@router.get("/contexts", operation_id="list_contexts")
+def list_contexts(request: Request) -> dict[str, Any]:
+    """Every context available to the caller."""
+    return impl.list_contexts(get_store(), _principal(request))
+
+
+@router.post("/contexts", operation_id="create_context")
+def create_context(payload: CreateProjectRequest, request: Request) -> dict[str, Any]:
+    """Create a context; the caller becomes its owner."""
+    return impl.create_context(
+        get_store(),
+        _principal(request),
+        payload.name,
+        description=payload.description,
+        make_active=False,
+    )
+
+
 @router.post("/projects", operation_id="create_project")
 def create_project(payload: CreateProjectRequest, request: Request) -> dict[str, Any]:
+    """Deprecated alias for POST /v1/contexts."""
     store = get_store()
     principal = _principal(request)
     project = store.projects.create_project(

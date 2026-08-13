@@ -30,7 +30,7 @@ class Principal:
 
 @dataclass(frozen=True)
 class RequestIdentity:
-    """A principal with a resolved role in one project."""
+    """A principal with a resolved role in one context (project)."""
 
     user_id: str
     agent_connection_id: str | None
@@ -38,9 +38,24 @@ class RequestIdentity:
     role: str
     scopes: tuple[str, ...] = ()
     label: str = ""
+    # Display info for the context, carried so every surface can announce which
+    # context it is operating in without a second query.
+    context_name: str = ""
+    context_slug: str = ""
 
     def has_scope(self, scope: str) -> bool:
         return scope in self.scopes
+
+    def active_context(self) -> dict[str, str]:
+        """The block every tool response echoes back to the agent."""
+        from .models import ROLE_TO_ACCESS
+
+        return {
+            "id": self.project_id,
+            "name": self.context_name,
+            "slug": self.context_slug,
+            "access": ROLE_TO_ACCESS.get(self.role, self.role),
+        }
 
     def require_reader(self) -> None:
         # Membership alone grants read; the READ scope is required when a token
