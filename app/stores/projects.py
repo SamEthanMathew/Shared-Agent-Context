@@ -212,6 +212,17 @@ class ProjectStore:
                     )
                 )
 
+    def remove_membership(self, project_id: str, user_id: str) -> None:
+        from sqlalchemy import delete
+
+        with self.engine.begin() as conn:
+            conn.execute(
+                delete(memberships).where(
+                    memberships.c.project_id == project_id,
+                    memberships.c.user_id == user_id,
+                )
+            )
+
     def get_role(self, project_id: str, user_id: str) -> str | None:
         with self.engine.begin() as conn:
             row = conn.execute(
@@ -375,6 +386,18 @@ class ProjectStore:
             conn.execute(
                 delete(context_bindings).where(
                     context_bindings.c.project_id == project_id
+                )
+            )
+
+    def clear_bindings_for_user_project(self, user_id: str, project_id: str) -> None:
+        """Drop one user's bindings to a context they can no longer access."""
+        from sqlalchemy import delete
+
+        with self.engine.begin() as conn:
+            conn.execute(
+                delete(context_bindings).where(
+                    context_bindings.c.user_id == user_id,
+                    context_bindings.c.project_id == project_id,
                 )
             )
 
