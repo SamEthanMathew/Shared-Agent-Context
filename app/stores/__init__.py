@@ -14,6 +14,7 @@ from ..identity import Principal, RequestIdentity
 from ..auth.store import AuthStore
 from .audit import AuditStore
 from .invites import InviteStore
+from .orgs import OrgStore
 from .memories import MemoryStore
 from .projects import ProjectStore
 from .sessions import SessionStore
@@ -30,6 +31,7 @@ class SACStore:
         self.snapshots = SnapshotStore(self.engine)
         self.auth = AuthStore(self.engine)
         self.invites = InviteStore(self.engine)
+        self.orgs = OrgStore(self.engine)
 
     def init(self) -> None:
         metadata.create_all(self.engine)

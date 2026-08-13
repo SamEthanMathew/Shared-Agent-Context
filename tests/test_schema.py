@@ -35,6 +35,8 @@ def test_create_all_is_idempotent(tmp_path):
         "context_bindings", "invites", "email_tokens", "rate_events",
         # federated sign-in (V3)
         "sso_identities",
+        # organisations above contexts
+        "organisations", "org_members",
     }
     assert expected <= names
     assert set(metadata.tables) == expected

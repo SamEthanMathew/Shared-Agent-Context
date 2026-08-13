@@ -98,6 +98,18 @@ export const api = {
   snapshot: (id, snapshotId) =>
     request('GET', `/v1/projects/${id}/snapshots/${snapshotId}`),
 
+  orgs: () => request('GET', '/v1/orgs'),
+  createOrg: (name) => request('POST', '/v1/orgs', { name }),
+  org: (id) => request('GET', `/v1/orgs/${id}`),
+  addOrgMember: (id, email, orgRole) =>
+    request('POST', `/v1/orgs/${id}/members`, { email, org_role: orgRole }),
+  removeOrgMember: (id, userId) =>
+    request('DELETE', `/v1/orgs/${id}/members/${userId}`),
+  setContextOrg: (contextId, orgId) =>
+    request('PUT', `/v1/contexts/${contextId}/org`, { org_id: orgId }),
+  setContextOrgAccess: (contextId, access) =>
+    request('PUT', `/v1/contexts/${contextId}/org-access`, { access }),
+
   connections: () => request('GET', '/v1/connections'),
   revokeConnection: (connId) =>
     request('POST', `/v1/connections/${connId}/revoke`),

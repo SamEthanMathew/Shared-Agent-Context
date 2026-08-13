@@ -12,6 +12,7 @@ from typing import Any
 from fastapi import APIRouter, Request
 
 from ..errors import ForbiddenError, NotFoundError
+from ..limits import require_verified
 from ..identity import Principal, RequestIdentity
 from ..runtime import get_store
 from . import impl, sharing
@@ -19,9 +20,12 @@ from .deps import resolve_principal
 from .schemas import (
     AccessRequest,
     AddMemberRequest,
+    ContextOrgRequest,
+    CreateOrgRequest,
     CreateProjectRequest,
     CreateSessionRequest,
     LinkAccessRequest,
+    OrgMemberRequest,
     RememberRequest,
     ShareRequest,
     SyncRequest,
@@ -377,6 +381,132 @@ def list_activity(context_id: str, request: Request, limit: int = 50) -> dict[st
             for e in events
         ],
     }
+
+
+# --- organisations ----------------------------------------------------------
+#
+# Administering an organisation and reading a context inside it are separate
+# permissions on purpose. Every route here either manages the group or returns
+# context *metadata*; none of them returns memory. Reading still requires a
+# membership, which is the same boundary every other path goes through.
+
+
+@router.get("/orgs", operation_id="list_orgs")
+def list_orgs(request: Request) -> dict[str, Any]:
+    store = get_store()
+    principal = _principal(request)
+    return {"ok": True, "orgs": store.orgs.list_for_user(principal.user_id)}
+
+
+@router.post("/orgs", operation_id="create_org")
+def create_org(payload: CreateOrgRequest, request: Request) -> dict[str, Any]:
+    store = get_store()
+    principal = _principal(request)
+    require_verified(store, principal.user_id, "create an organisation")
+    org = store.orgs.create(payload.name, principal.user_id)
+    store.audit.emit(
+        "org.create", "organisation", org["id"], actor_user_id=principal.user_id,
+        meta={"name": org["name"]},
+    )
+    return {"ok": True, "org": org}
+
+
+@router.get("/orgs/{org_id}", operation_id="get_org")
+def get_org(org_id: str, request: Request) -> dict[str, Any]:
+    """The organisation, its people, and its contexts (metadata only)."""
+    store = get_store()
+    principal = _principal(request)
+    role = store.orgs.get_org_role(org_id, principal.user_id)
+    if role is None:
+        raise ForbiddenError("no such organisation")
+    org = store.orgs.get(org_id) or {}
+    return {
+        "ok": True,
+        "org": {"id": org_id, "name": org.get("name"), "slug": org.get("slug")},
+        "your_role": role,
+        "members": store.orgs.list_members(org_id),
+        "contexts": store.orgs.list_org_contexts(org_id),
+    }
+
+
+@router.post("/orgs/{org_id}/members", operation_id="add_org_member")
+def add_org_member(
+    org_id: str, payload: OrgMemberRequest, request: Request
+) -> dict[str, Any]:
+    store = get_store()
+    principal = _principal(request)
+    store.orgs.require_org_admin(org_id, principal.user_id)
+    user = store.projects.get_user_by_email(payload.email)
+    # An unverified account is treated as no account here for the same reason as
+    # in sharing: nobody has proved they control that mailbox, so adding it to a
+    # group would let an address squatter inherit whatever the group can see.
+    if user is None or not store.auth.is_email_verified(user["id"]):
+        raise NotFoundError(
+            "no verified account for that email; ask them to sign up and verify first"
+        )
+    store.orgs.add_member(org_id, user["id"], payload.org_role)
+    store.audit.emit(
+        "org.member_add", "organisation", org_id, actor_user_id=principal.user_id,
+        meta={"email": payload.email, "org_role": payload.org_role},
+    )
+    return {"ok": True, "email": payload.email, "org_role": payload.org_role}
+
+
+@router.delete("/orgs/{org_id}/members/{user_id}", operation_id="remove_org_member")
+def remove_org_member(org_id: str, user_id: str, request: Request) -> dict[str, Any]:
+    store = get_store()
+    principal = _principal(request)
+    store.orgs.require_org_admin(org_id, principal.user_id)
+    store.orgs.remove_member(org_id, user_id)
+    store.audit.emit(
+        "org.member_remove", "organisation", org_id,
+        actor_user_id=principal.user_id, meta={"user_id": user_id},
+    )
+    return {"ok": True, "removed": True}
+
+
+@router.put("/contexts/{context_id}/org", operation_id="set_context_org")
+def set_context_org(
+    context_id: str, payload: ContextOrgRequest, request: Request
+) -> dict[str, Any]:
+    """Move a context into an organisation, or back out of one.
+
+    Requires ownership of the context *and* admin of the destination
+    organisation: moving something into a group is a decision for both sides.
+    Access is unchanged by the move — `org_access` stays where it was.
+    """
+    store = get_store()
+    identity = _identity(request, context_id)
+    if identity.role != "owner":
+        raise ForbiddenError("only the context owner can move it")
+
+    if payload.org_id:
+        store.orgs.require_org_admin(payload.org_id, identity.user_id)
+        store.orgs.attach_project(payload.org_id, context_id)
+    else:
+        store.orgs.detach_project(context_id)
+    store.audit.emit(
+        "context.org_change", "project", context_id, project_id=context_id,
+        actor_user_id=identity.user_id, meta={"org_id": payload.org_id},
+    )
+    return {"ok": True, "org_id": payload.org_id}
+
+
+@router.put("/contexts/{context_id}/org-access", operation_id="set_context_org_access")
+def set_context_org_access(
+    context_id: str, payload: LinkAccessRequest, request: Request
+) -> dict[str, Any]:
+    """What every member of the owning organisation gets. Never `manage`."""
+    store = get_store()
+    identity = _identity(request, context_id)
+    if identity.role not in ("owner", "admin"):
+        raise ForbiddenError("only owners and managers can change organisation access")
+    level = store.orgs.set_org_access(context_id, payload.access)
+    store.audit.emit(
+        "context.org_access", "project", context_id, project_id=context_id,
+        actor_user_id=identity.user_id, meta={"access": level},
+    )
+    return {"ok": True, "org_access": level}
 
 
 # --- connected AI clients ---------------------------------------------------

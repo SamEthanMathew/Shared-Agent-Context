@@ -51,6 +51,55 @@ Records are **private to the person whose agent made the call** — a snapshot
 enumerates that person's private memories, so not even a context owner can read
 someone else's.
 
+## Organisations
+
+An organisation is a group of people who share several contexts. Without one,
+every context is shared person by person; with one, you grant the whole group at
+once. Create one under **Organisations** in the web app.
+
+A context belongs either to a person (the default, and what every existing
+context is) or to an organisation. Moving it in is done from its **Share**
+dialog, and requires being the context's owner *and* an admin of the destination
+— pushing your context into someone else's group is not one person's decision.
+
+Three sharing dials then exist side by side, and they are independent:
+
+| Dial | Grants |
+|---|---|
+| **People** | A named person, at view / edit / manage. |
+| **Anyone with the link** | Whoever holds the link, at view or edit. |
+| **Organisation** | Everyone in the owning organisation, at view or edit. |
+
+**Organisation access defaults to none.** Creating an organisation, adding people
+to it, and moving a context into it all grant nothing on their own. Access
+becomes real only when someone sets that third dial. This is deliberate: a
+grouping mechanism that silently exposed existing memory the moment it was used
+would be unsafe to adopt.
+
+**It can never grant *manage*** — the same rule as share links, for the same
+reason. Manage carries the right to re-share, and neither a link nor group
+membership should be able to pass that on.
+
+**Administering an organisation is not the same as reading its contexts.** An
+organisation admin can see which contexts belong to the group and how each is
+shared, which is what administering a group requires. Reading one still needs the
+organisation dial to allow it, or an invitation of their own.
+
+### How access is stored, and why it matters
+
+Organisation access is **materialised into ordinary membership rows**, tagged
+`source='org'`, rather than checked as a second permission path. The permission
+boundary (`_visible()` and `resolve_identity`) never learns about organisations at
+all, so every existing query, test, and isolation guarantee keeps working
+unchanged, and an org-derived member is indistinguishable from an invited one at
+read time.
+
+The rule that follows is worth knowing as a user: **an explicit invitation
+outranks organisation access.** Removing someone from an organisation revokes
+only what the organisation gave them — a context they were invited to
+individually stays theirs. That is what anyone would expect, and it is the
+behaviour that fails safe when two people are managing access independently.
+
 ## How long data is kept
 
 A `sac-reaper` cron job (`scripts/reaper.py`, daily) applies retention. It is a

@@ -12,6 +12,7 @@ import {
 import ContextView from './views/ContextView.jsx'
 import ContextsView from './views/ContextsView.jsx'
 import ClientsView from './views/ClientsView.jsx'
+import OrgsView from './views/OrgsView.jsx'
 import { Link, contextIdFrom, useRoute } from './router.jsx'
 
 export default function App() {
@@ -63,6 +64,9 @@ export default function App() {
 
         <div className="topbar-spacer" />
 
+        <Link to="/orgs" navigate={navigate} className="btn ghost sm">
+          Organisations
+        </Link>
         <Link to="/clients" navigate={navigate} className="btn ghost sm">
           AI clients
         </Link>
@@ -97,6 +101,8 @@ export default function App() {
         />
       ) : path === '/clients' ? (
         <ClientsView contexts={contexts} toast={push} navigate={navigate} />
+      ) : path === '/orgs' ? (
+        <OrgsView navigate={navigate} toast={push} onChanged={refresh} />
       ) : (
         <ContextsView
           me={me}

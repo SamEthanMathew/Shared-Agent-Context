@@ -7,7 +7,14 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from ..models import AccessLevel, LinkAccess, MemoryKind, Scope, Sensitivity
+from ..models import (
+    AccessLevel,
+    LinkAccess,
+    MemoryKind,
+    OrgRole,
+    Scope,
+    Sensitivity,
+)
 
 
 class CreateProjectRequest(BaseModel):
@@ -22,6 +29,21 @@ class ShareRequest(BaseModel):
 
 class AccessRequest(BaseModel):
     access: AccessLevel
+
+
+class CreateOrgRequest(BaseModel):
+    name: str = Field(..., min_length=1)
+
+
+class OrgMemberRequest(BaseModel):
+    email: str = Field(..., min_length=3)
+    org_role: OrgRole = "member"
+
+
+class ContextOrgRequest(BaseModel):
+    """Which organisation owns this context. None makes it personal again."""
+
+    org_id: str | None = None
 
 
 class UseContextRequest(BaseModel):

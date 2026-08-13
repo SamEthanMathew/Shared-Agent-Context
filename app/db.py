@@ -154,9 +154,22 @@ projects = Table(
     # to be able to read the link back to hand it out again. Rotating replaces
     # it, which is what invalidates copies already in circulation.
     Column("link_token", String(64), nullable=True, unique=True),
+    # A context belongs either to an organisation or to a person, as before.
+    # NULL is the personal case and stays the default.
+    Column("org_id", String(36), ForeignKey("organisations.id"), nullable=True),
+    # What every member of the owning organisation gets. Defaults to `none`, so
+    # creating an organisation or moving a context into one never retroactively
+    # exposes its memory — access becomes real only when a human sets this.
+    # Never `manage`, for the same reason link_access never is: it would let
+    # membership propagate the right to re-share.
+    Column("org_access", String(8), nullable=False, default="none"),
     CheckConstraint(
         "link_access IN ('none','view','edit')", name="ck_project_link_access"
     ),
+    CheckConstraint(
+        "org_access IN ('none','view','edit')", name="ck_project_org_access"
+    ),
+    Index("ix_projects_org", "org_id"),
 )
 
 memberships = Table(
@@ -166,9 +179,46 @@ memberships = Table(
     Column("user_id", String(36), ForeignKey("users.id"), primary_key=True),
     Column("role", String(24), nullable=False, default="member"),
     Column("created_at", DateTime(timezone=True), nullable=False),
+    # Where this access came from: an explicit invitation ('direct') or the
+    # organisation owning the context ('org').
+    #
+    # This table stays the single source of truth for who may read a context —
+    # organisation access is *materialised* into rows here rather than checked
+    # as a parallel path, so `_visible()` and `resolve_identity` never learn a
+    # second concept and remain the one boundary they always were. This column
+    # is what makes revocation clean: removing someone from an organisation
+    # deletes only their 'org' rows, leaving an explicit invitation intact.
+    Column("source", String(8), nullable=False, default="direct"),
     Index("ix_memberships_user", "user_id"),
     CheckConstraint(
         "role IN ('owner','admin','member','viewer')", name="ck_membership_role"
+    ),
+    CheckConstraint("source IN ('direct','org')", name="ck_membership_source"),
+)
+
+organisations = Table(
+    "organisations",
+    metadata,
+    Column("id", String(36), primary_key=True),
+    Column("name", String(255), nullable=False),
+    Column("slug", String(120), nullable=True, unique=True),
+    Column("created_by_user_id", String(36), ForeignKey("users.id"), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+)
+
+org_members = Table(
+    "org_members",
+    metadata,
+    Column("org_id", String(36), ForeignKey("organisations.id"), primary_key=True),
+    Column("user_id", String(36), ForeignKey("users.id"), primary_key=True),
+    # Distinct from the per-context roles above: being an organisation admin says
+    # nothing about what you may read inside any particular context.
+    Column("org_role", String(16), nullable=False, default="member"),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Index("ix_org_members_user", "user_id"),
+    CheckConstraint(
+        "org_role IN ('owner','admin','member')", name="ck_org_role"
     ),
 )
 

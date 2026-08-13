@@ -351,10 +351,36 @@ def list_shares(
         }
         for i in store.invites.list_pending(identity.project_id)
     ]
+    # Organisation state, so the share dialog can show all three dials together:
+    # named people, anyone with the link, and everyone in the owning group.
+    project = store.projects.get_project(identity.project_id)
+    org = {"id": None, "name": "", "access": "none"}
+    if project is not None and project.org_id:
+        record = store.orgs.get(project.org_id)
+        org = {
+            "id": project.org_id,
+            "name": (record or {}).get("name", ""),
+            "access": project.org_access or "none",
+        }
+
     return {
         "ok": True,
         "members": members,
         "pending_invites": pending,
         "link": get_link(store, identity, base_url),
+        "org": org,
+        # Organisations the caller could move this context into: ones they
+        # administer. Only meaningful to an owner, who is the only role allowed
+        # to move a context.
+        "your_orgs": (
+            [
+                {"id": o["id"], "name": o["name"]}
+                for o in store.orgs.list_for_user(identity.user_id)
+                if o["org_role"] in ("owner", "admin")
+            ]
+            if identity.role == "owner"
+            else []
+        ),
         "can_share": identity.role in SHARER_ROLES,
+        "your_role": identity.role,
     }

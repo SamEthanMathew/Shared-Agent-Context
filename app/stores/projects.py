@@ -174,6 +174,8 @@ class ProjectStore:
             archived_at=m["archived_at"],
             link_access=m["link_access"] or "none",
             link_token=m["link_token"],
+            org_id=m["org_id"],
+            org_access=m["org_access"] or "none",
         )
 
     def get_project(self, project_id: str) -> ProjectRecord | None:
@@ -241,9 +243,26 @@ class ProjectStore:
             ).first()
         return self._to_record(row._mapping) if row else None
 
-    def add_membership(self, project_id: str, user_id: str, role: str = "member") -> None:
+    def add_membership(
+        self,
+        project_id: str,
+        user_id: str,
+        role: str = "member",
+        source: str = "direct",
+    ) -> None:
+        """Grant someone a role in a context.
+
+        ``source`` records where the access came from. Everything a human does —
+        an invitation, a share link, an access change — is ``direct``; only the
+        organisation materialiser passes ``org``. A direct grant over an
+        org-derived row promotes it, so that person keeps the context if they
+        later leave the organisation. See app/stores/orgs.py for why access is
+        materialised into this table rather than checked as a second path.
+        """
         if role not in {"owner", "admin", "member", "viewer"}:
             raise ValidationError(f"invalid role: {role}")
+        if source not in {"direct", "org"}:
+            raise ValidationError(f"invalid membership source: {source}")
         with self.engine.begin() as conn:
             if conn.execute(
                 select(projects.c.id).where(projects.c.id == project_id)
@@ -254,19 +273,24 @@ class ProjectStore:
             ).first() is None:
                 raise NotFoundError("user not found")
             existing = conn.execute(
-                select(memberships.c.role).where(
+                select(memberships.c.role, memberships.c.source).where(
                     memberships.c.project_id == project_id,
                     memberships.c.user_id == user_id,
                 )
             ).first()
             if existing:
+                values: dict[str, Any] = {"role": role}
+                # Never downgrade direct to org: an explicit invitation outranks
+                # whatever the organisation happens to advertise.
+                if source == "direct":
+                    values["source"] = "direct"
                 conn.execute(
                     update(memberships)
                     .where(
                         memberships.c.project_id == project_id,
                         memberships.c.user_id == user_id,
                     )
-                    .values(role=role)
+                    .values(**values)
                 )
             else:
                 conn.execute(
@@ -274,6 +298,7 @@ class ProjectStore:
                         project_id=project_id,
                         user_id=user_id,
                         role=role,
+                        source=source,
                         created_at=utcnow(),
                     )
                 )

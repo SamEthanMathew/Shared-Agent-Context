@@ -86,8 +86,15 @@ ACCESS_TO_ROLE: dict[str, str] = {
 }
 # What "anyone with the link" may be set to. `manage` is absent on purpose: a
 # link that grants the right to re-share would propagate access no human chose.
+# The same set governs organisation-wide access, for the same reason.
 LINK_ACCESS_LEVELS: tuple[str, ...] = ("none", "view", "edit")
 LinkAccess = Literal["none", "view", "edit"]
+
+# Roles inside an organisation. Deliberately separate from the per-context roles
+# above: administering a group says nothing about what you may read inside any
+# particular context in it.
+ORG_ROLES: frozenset[str] = frozenset({"owner", "admin", "member"})
+OrgRole = Literal["owner", "admin", "member"]
 ROLE_TO_ACCESS: dict[str, str] = {
     "viewer": "view",
     "member": "edit",
@@ -237,3 +244,6 @@ class ProjectRecord:
     archived_at: datetime | None = None
     link_access: str = "none"
     link_token: str | None = None
+    # NULL when the context belongs to a person rather than an organisation.
+    org_id: str | None = None
+    org_access: str = "none"

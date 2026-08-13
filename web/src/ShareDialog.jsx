@@ -283,7 +283,121 @@ export default function ShareDialog({ context, onClose, onChanged, toast }) {
           </p>
         ) : null}
       </div>
+
+      <OrgSection
+        context={context}
+        state={state}
+        canShare={canShare}
+        busy={busy}
+        act={act}
+      />
     </Dialog>
+  )
+}
+
+/* The third dial: everyone in the organisation that owns this context.
+ *
+ * Same rule as the link dial, for the same reason — it can grant view or edit,
+ * never manage, so group membership can never pass on the ability to share. */
+function OrgSection({ context, state, canShare, busy, act }) {
+  const org = state?.org || { id: null, name: '', access: 'none' }
+  const yourOrgs = state?.your_orgs || []
+  const isOwner = state?.your_role === 'owner'
+
+  if (!org.id && !yourOrgs.length) return null
+
+  return (
+    <>
+      <h3 style={{ margin: '24px 0 8px' }}>Organisation</h3>
+      <div className="link-panel">
+        {org.id ? (
+          <>
+            <p className="tiny" style={{ margin: '0 0 10px' }}>
+              Owned by <strong>{org.name}</strong>.
+            </p>
+            <div className="row">
+              <select
+                value={org.access}
+                onChange={(e) =>
+                  act(
+                    () => api.setContextOrgAccess(context.id, e.target.value),
+                    e.target.value === 'none'
+                      ? 'Organisation access turned off'
+                      : `Everyone in ${org.name} can ${e.target.value}`
+                  )
+                }
+                disabled={!canShare || busy}
+                style={{ width: 'auto' }}
+                aria-label="Organisation access"
+              >
+                <option value="none">No access — invited people only</option>
+                <option value="view">Everyone in the organisation can view</option>
+                <option value="edit">Everyone in the organisation can edit</option>
+              </select>
+            </div>
+            <p className="tiny" style={{ margin: '10px 0 0' }}>
+              {org.access === 'none'
+                ? 'Belonging to the organisation grants nothing here on its own.'
+                : 'Applies to everyone in the organisation, now and as people join. Like a link, it can never grant manage.'}
+            </p>
+            {isOwner ? (
+              <button
+                className="btn ghost sm"
+                style={{ marginTop: 10 }}
+                disabled={busy}
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      `Remove this context from ${org.name}? People who only had access through the organisation will lose it. Anyone invited individually keeps theirs.`
+                    )
+                  )
+                    act(
+                      () => api.setContextOrg(context.id, null),
+                      'Context is personal again'
+                    )
+                }}
+              >
+                Remove from {org.name}
+              </button>
+            ) : null}
+          </>
+        ) : (
+          <>
+            <p className="tiny" style={{ margin: '0 0 10px' }}>
+              This context belongs to you personally. Moving it into an
+              organisation lets you grant its whole group access at once.
+            </p>
+            <div className="row">
+              <select
+                defaultValue=""
+                disabled={busy}
+                style={{ width: 'auto', minWidth: 200 }}
+                aria-label="Move into organisation"
+                onChange={(e) => {
+                  if (!e.target.value) return
+                  const chosen = yourOrgs.find((o) => o.id === e.target.value)
+                  act(
+                    () => api.setContextOrg(context.id, e.target.value),
+                    `Moved into ${chosen?.name || 'the organisation'}`
+                  )
+                }}
+              >
+                <option value="">Move into an organisation…</option>
+                {yourOrgs.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className="tiny" style={{ margin: '10px 0 0' }}>
+              Moving it in grants nobody anything by itself — you choose the
+              access level afterwards.
+            </p>
+          </>
+        )}
+      </div>
+    </>
   )
 }
 
