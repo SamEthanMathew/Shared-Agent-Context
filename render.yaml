@@ -16,6 +16,10 @@ services:
     # `free` if you accept that and pre-warm /health before demos.
     plan: starter
     buildCommand: pip install -r requirements.txt
+    # Migrate before serving. scripts/migrate.py handles the pre-Alembic V1
+    # database (built by create_all, never stamped) as well as fresh installs,
+    # and is a no-op once current.
+    preDeployCommand: python scripts/migrate.py
     # --proxy-headers + --forwarded-allow-ips='*' make request.url.scheme https
     # behind Render's TLS proxy, so issuer URLs and Secure cookies are correct.
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips='*'
