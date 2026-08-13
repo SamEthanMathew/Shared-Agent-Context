@@ -35,6 +35,44 @@ MAX_MEMORIES_PER_CONTEXT = _int_env("SAC_MAX_MEMORIES_PER_CONTEXT", 50_000)
 # letting recall quietly degrade.
 COMPILE_CANDIDATE_LIMIT = _int_env("SAC_COMPILE_CANDIDATE_LIMIT", 750)
 
+# How many memories the task-match channel may pull in from *outside* that
+# window. This is the budget for "old but relevant", which the recency window
+# structurally cannot contain: the whole point is to reach past it. Kept well
+# below the recency budget because a match is only a hint — the ranker still has
+# to justify including any of them, and every extra row is transfer cost on a
+# call that runs at the start of every agent turn.
+MATCH_CANDIDATE_LIMIT = _int_env("SAC_MATCH_CANDIDATE_LIMIT", 250)
+
+# Ceiling on how many search terms one task may expand to. A task of a dozen
+# words, each in a synonym group, would otherwise build a WHERE clause of a
+# hundred alternatives — enough to make the match channel cost more than the
+# recall it buys. Literal task words are kept ahead of their expansions, so what
+# gets dropped is always the least direct.
+MAX_MATCH_TERMS = _int_env("SAC_MAX_MATCH_TERMS", 48)
+
+# --- resolution ladder (see models.RESOLUTIONS) -----------------------------
+
+# How much of a body one FULL rendering may spend. A memory's details may be
+# 20,000 characters, which is more than a whole default sync's budget — one
+# pinned memory could otherwise crowd out every other memory in the context. The
+# excerpt is taken in SQL, so the rest never leaves the database.
+DETAILS_EXCERPT_CHARS = _int_env("SAC_DETAILS_EXCERPT_CHARS", 480)
+
+# How much summary a TRACE line keeps. Enough to recognise the memory and decide
+# whether to fetch it by id; short enough that the rung is worth having.
+TRACE_SUMMARY_CHARS = _int_env("SAC_TRACE_SUMMARY_CHARS", 64)
+
+# How many memories one sync may render at FULL. In a context where the owner
+# writes most of the memory, nearly everything is pinned by authority, and
+# without a ceiling the whole budget would go to bodies. The cap applies to the
+# highest-ranked pinned memories; the rest are still rendered, one line each.
+FULL_RENDER_LIMIT = _int_env("SAC_FULL_RENDER_LIMIT", 12)
+
+# The repeated-inclusion pin: how many recent syncs are looked at, and how many
+# DISTINCT tasks a memory must have been included for to count as load-bearing.
+PIN_SNAPSHOT_WINDOW = _int_env("SAC_PIN_SNAPSHOT_WINDOW", 12)
+PIN_DISTINCT_TASKS = _int_env("SAC_PIN_DISTINCT_TASKS", 3)
+
 MAX_SUMMARY_CHARS = _int_env("SAC_MAX_SUMMARY_CHARS", 2_000)
 MAX_DETAILS_CHARS = _int_env("SAC_MAX_DETAILS_CHARS", 20_000)
 MAX_TAGS = _int_env("SAC_MAX_TAGS", 25)

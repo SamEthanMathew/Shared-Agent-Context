@@ -71,6 +71,9 @@ class SyncRequest(BaseModel):
     task: str = Field(..., min_length=1)
     session_ref: str = Field(default="default")
     local_context_delta: str = ""
+    # Accepted for wire compatibility and never read: the watermark this would
+    # override is server-side per-session state. Removing the field would turn a
+    # working request from an existing client into a validation error.
     known_revision: int | None = None
     budget_tokens: int = Field(default=3000, ge=500, le=20000)
     delta_scope: Scope = "shared"

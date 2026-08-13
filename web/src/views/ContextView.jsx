@@ -400,7 +400,16 @@ function SentTab({ context }) {
                     onClick={() => setOpen(s)}
                     style={{ cursor: 'pointer' }}
                   >
-                    <td>{s.task || <span className="tiny">—</span>}</td>
+                    <td>
+                      {s.task || <span className="tiny">—</span>}
+                      {/* The row worth opening. Without it, a sync that had to
+                       * leave memory out looks exactly like one that did not. */}
+                      {s.truncated ? (
+                        <span className="badge" style={{ marginLeft: 8 }}>
+                          cut short
+                        </span>
+                      ) : null}
+                    </td>
                     <td className="mono">r{s.project_revision}</td>
                     <td>{s.included_count}</td>
                     <td>
@@ -457,6 +466,8 @@ function SnapshotDialog({ contextId, snapshot, onClose }) {
             {when(detail.snapshot.created_at)}
           </p>
 
+          <Funnel funnel={detail.snapshot.funnel} />
+
           <h3 style={{ marginBottom: 8 }}>
             Included ({detail.included.length})
           </h3>
@@ -469,6 +480,56 @@ function SnapshotDialog({ contextId, snapshot, onClose }) {
         </>
       ) : null}
     </Dialog>
+  )
+}
+
+/* Where the memory went — the funnel the compiler recorded for this sync.
+ *
+ * The lists below say what got in and what was named as withheld. This says
+ * what happened to everything else: how much was considered, how much was never
+ * this person's to see, how much lost its place in ranking, how much had faded,
+ * and how much simply did not fit. Rows that are zero are left out, and a
+ * snapshot recorded before the compiler counted any of this renders nothing at
+ * all — an empty funnel is silence, not a wall of confident zeroes.
+ */
+function Funnel({ funnel }) {
+  if (!funnel || !Object.keys(funnel).length) return null
+  const shown = funnel.resolutions || {}
+  const stages = [
+    ['Considered', funnel.candidates_considered],
+    // Other members' private memory. A count, never a name — the server never
+    // sends the ids, and this must never become the place they appear.
+    ['Not yours to see', funnel.filtered_permission],
+    ['Outranked', funnel.dropped_ranking],
+    ['Repeated something already included', funnel.dropped_redundant],
+    ['Faded with age', funnel.omitted_faded],
+    ['Did not fit the budget', funnel.dropped_budget],
+    ['Shown in full', shown.full],
+    ['Shown as one line', shown.summary],
+    ['Shown as a trace', shown.trace],
+  ].filter(([, count]) => count)
+
+  return (
+    <>
+      {funnel.budget_unsatisfiable ? (
+        <div className="notice warn" style={{ marginBottom: 12 }}>
+          This sync was refused rather than cut down: the task and the memories
+          in unresolved conflict needed about {funnel.required_tokens} tokens,
+          and those are never dropped quietly. The agent was told to ask again
+          with a larger budget.
+        </div>
+      ) : null}
+      {stages.length ? (
+        <div className="list" style={{ marginBottom: 20 }}>
+          {stages.map(([label, count]) => (
+            <div className="item row" key={label} style={{ padding: '6px 0' }}>
+              <span className="grow tiny">{label}</span>
+              <span className="mono">{count}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </>
   )
 }
 

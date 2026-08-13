@@ -1351,3 +1351,101 @@ button { font: inherit; color: inherit; }
 .mt-6 { margin-top: var(--s-6); }
 .mt-7 { margin-top: var(--s-7); }
 .inline-cta { display: inline-flex; align-items: center; gap: var(--s-2); min-height: 24px; }
+
+/* ==========================================================================
+   24. Hosted-product surfaces
+
+   Added when the site stopped describing something you run and started
+   describing something you sign in to: a way back in from the nav, a pricing
+   table, and two small fixes for markup that used to carry inline style
+   attributes. Those attributes are gone because the app serves this site under
+   `default-src 'self'`, which drops inline CSS — a style attribute here would
+   simply not apply in production.
+   ========================================================================== */
+
+/* "Sign in" sits beside the primary action rather than in the link row: a
+   returning customer should not have to find a menu to get back to their work.
+   Hidden on the narrowest screens for the same reason the wordmark is — below
+   ~420px the mark, toggle and CTA are already all that fits. */
+.nav__link--action {
+  display: none;
+  align-items: center;
+  min-height: 44px;
+  padding-inline: var(--s-2);
+}
+@media (min-width: 26rem) { .nav__link--action { display: inline-flex; } }
+
+/* The sync receipt lost two of its four figures when the site stopped teaching
+   revisions and token budgets. Three across reads as a summary; three in a
+   four-column grid reads as one that is missing something. */
+.receipt__stats--three { grid-template-columns: 1fr; }
+@media (min-width: 48rem) { .receipt__stats--three { grid-template-columns: repeat(3, 1fr); } }
+
+.footer__blurb { max-width: 34ch; }
+.footer__bottom--bare { margin-top: 0; padding-top: 0; border-top: 0; }
+.footer__home { color: inherit; text-decoration: none; }
+.footer__home:hover { color: var(--osmos-text); }
+
+/* --- pricing ---------------------------------------------------------------
+   Three plans, equal weight. Pro is marked with a single flow stroke and a
+   raised surface rather than a gradient: the gradient means knowledge moving,
+   and a price is not that. */
+/* Deliberately not `align-items: start`: the three cards stretch to the tallest,
+   which is what lets .plan__cta push the buttons onto one line. */
+.plans { display: grid; gap: var(--s-4); grid-template-columns: 1fr; }
+@media (min-width: 60rem) { .plans { grid-template-columns: repeat(3, 1fr); } }
+.plans > * { min-width: 0; }
+
+.plan {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  padding: var(--s-5);
+  background: var(--osmos-surface);
+  border: 1px solid var(--osmos-border);
+  border-radius: var(--osmos-radius-lg);
+}
+@media (min-width: 48rem) { .plan { padding: var(--s-6); } }
+.plan--feature {
+  background: var(--osmos-surface-raised);
+  border-color: color-mix(in srgb, var(--flow-4) 55%, transparent);
+}
+
+.plan__name { font-size: 1.0625rem; font-weight: 600; letter-spacing: .01em; }
+.plan__price { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s-2); }
+.plan__amount {
+  font-size: clamp(2.25rem, 1.9rem + 1.6vw, 3rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.plan__per { font-size: .875rem; color: var(--osmos-text-muted); }
+.plan__note { font-size: .875rem; color: var(--osmos-text-muted); }
+
+.plan__list { display: flex; flex-direction: column; gap: var(--s-3); }
+.plan__item {
+  position: relative;
+  padding-left: var(--s-5);
+  font-size: .9375rem;
+  line-height: 1.5;
+  color: var(--osmos-text-muted);
+}
+/* A thin stroke rather than a tick: five of these stacked is the logo's stream
+   spacing, and a column of ticks reads as a checklist to be audited. */
+.plan__item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: .55em;
+  width: 10px;
+  height: 1.5px;
+  border-radius: 2px;
+  background: var(--osmos-border);
+}
+.plan--feature .plan__item::before { background: color-mix(in srgb, var(--flow-4) 70%, transparent); }
+
+/* Pushed to the bottom so the three buttons line up even when the lists differ
+   in length — a ragged row of CTAs makes the middle plan look like the answer
+   for the wrong reason. */
+.plan__cta { margin-top: auto; align-self: flex-start; }

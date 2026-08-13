@@ -9,7 +9,7 @@ from __future__ import annotations
 import html
 from datetime import timedelta
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Form, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from mcp.server.auth.provider import construct_redirect_uri
 
@@ -64,6 +64,13 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-ser
   margin:0;padding:6vh 1rem 4rem;color:var(--mineral);background:var(--ink-950);
   line-height:1.55;-webkit-font-smoothing:antialiased}
 .wrap{margin:0 auto}
+.wrap.narrow{max-width:26rem}
+.wrap.wide{max-width:56rem}
+.err{color:var(--danger)}
+.flush{margin-top:0}
+.gap{margin-top:1.4rem}
+.centered{text-align:center}
+.full{width:100%}
 .brand{display:flex;align-items:center;gap:.6rem;justify-content:center;
   margin-bottom:1.5rem;font-weight:600;letter-spacing:-.01em;font-size:1.05rem}
 .brand .bar{width:38px;height:3px;border-radius:2px;background:var(--flow)}
@@ -119,13 +126,35 @@ _MARK = (
 )
 
 
-def _shell(title: str, body: str, max_width: str) -> str:
+@router.get("/auth/osmos.css", include_in_schema=False)
+def stylesheet() -> Response:
+    """Serve the page CSS as a real stylesheet.
+
+    It cannot be inlined. `app/main.py` sends `Content-Security-Policy:
+    default-src 'self'`, and with no `style-src` of its own that falls back to
+    `'self'` — which blocks inline `<style>` blocks and inline `style=`
+    attributes outright. Every server-rendered page here was therefore arriving
+    completely unstyled in production, with no error anywhere: the HTML is valid,
+    the CSS simply never applies.
+
+    Served same-origin, so `'self'` allows it, and the CSP stays strict rather
+    than being loosened with `'unsafe-inline'` to accommodate us.
+    """
+    return Response(
+        content=_STYLE,
+        media_type="text/css",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
+def _shell(title: str, body: str, width_class: str) -> str:
+    # Width is a class rather than an inline style for the same CSP reason.
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
 <title>{html.escape(title)} · Osmos</title>
-<style>{_STYLE}.wrap{{max-width:{max_width}}}</style>
-</head><body><div class="wrap">
+<link rel="stylesheet" href="/auth/osmos.css">
+</head><body><div class="wrap {width_class}">
 <div class="brand">{_MARK}<span>Osmos</span></div>
 <div class="card">{body}</div>
 </div></body></html>"""
@@ -133,12 +162,12 @@ def _shell(title: str, body: str, max_width: str) -> str:
 
 def _page(title: str, body: str) -> str:
     """Narrow shell for forms (sign-in, consent, invites)."""
-    return _shell(title, body, "26rem")
+    return _shell(title, body, "narrow")
 
 
 def _wide_page(title: str, body: str) -> str:
     """Wider shell for the console, which renders tables."""
-    return _shell(title, body, "56rem")
+    return _shell(title, body, "wide")
 
 
 def _current_user(request: Request) -> str | None:
@@ -204,7 +233,7 @@ def _carry(txn: str, next_url: str) -> str:
 def login_form(
     request: Request, txn: str = "", error: str = "", next: str = ""
 ) -> HTMLResponse:
-    err = f'<p class="muted" style="color:#b00">{html.escape(error)}</p>' if error else ""
+    err = f'<p class="muted err">{html.escape(error)}</p>' if error else ""
     nxt = html.escape(_safe_next(next))
     carry = _carry(txn, next)
     connecting = (
@@ -276,11 +305,11 @@ def _sso_buttons(carry: str) -> str:
         return ""
     links = "".join(
         f'<p><a href="/auth/sso/{p.name}/start{carry}">'
-        f'<button type="button" class="secondary" style="width:100%">'
+        f'<button type="button" class="secondary" class="full">'
         f"Continue with {html.escape(p.label)}</button></a></p>"
         for p in providers
     )
-    return f'{links}<p class="muted" style="text-align:center">or</p>'
+    return f'{links}<p class="muted centered">or</p>'
 
 
 def _sso_redirect_uri(request: Request, provider_name: str) -> str:
@@ -392,7 +421,7 @@ MIN_PASSWORD = 10
 def signup_form(
     request: Request, error: str = "", next: str = "", txn: str = ""
 ) -> HTMLResponse:
-    err = f'<p class="muted" style="color:#b00">{html.escape(error)}</p>' if error else ""
+    err = f'<p class="muted err">{html.escape(error)}</p>' if error else ""
     nxt = html.escape(_safe_next(next))
     carry = _carry(txn, next)
     connecting = (
@@ -507,7 +536,7 @@ def forgot_submit(request: Request, email: str = Form(...)):
 
 @router.get("/auth/reset", response_class=HTMLResponse)
 def reset_form(token: str = "", error: str = ""):
-    err = f'<p class="muted" style="color:#b00">{html.escape(error)}</p>' if error else ""
+    err = f'<p class="muted err">{html.escape(error)}</p>' if error else ""
     body = f"""<h1>Choose a new password</h1>{err}
 <form method="post" action="/auth/reset">
 <input type="hidden" name="token" value="{html.escape(token)}">
@@ -570,11 +599,11 @@ def consent_form(request: Request, txn: str = ""):
         f"<li>{html.escape(meanings.get(s, s))}</li>" for s in scopes
     )
     body = f"""<h1>Connect {html.escape(client_name)}</h1>
-<p class="muted" style="margin-top:0">
+<p class="muted flush">
 {html.escape(client_name)} at <code>{html.escape(redirect_host)}</code> is asking
 to use Osmos as <b>{html.escape(email)}</b>.</p>
 
-<h2 style="margin-top:1.4rem">It will be able to</h2>
+<h2 class="gap">It will be able to</h2>
 <ul>{scope_items}</ul>
 
 <div class="notice">

@@ -248,7 +248,9 @@ def sync_context(project_id: str, payload: SyncRequest, request: Request) -> dic
         get_store(), identity,
         task=payload.task, session_ref=payload.session_ref,
         local_context_delta=payload.local_context_delta,
-        known_revision=payload.known_revision, budget_tokens=payload.budget_tokens,
+        # payload.known_revision is deliberately not forwarded — see the note on
+        # SyncRequest. The sync watermark is server-side per-session state.
+        budget_tokens=payload.budget_tokens,
         delta_scope=payload.delta_scope,
     )
 

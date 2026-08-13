@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select, update
+from sqlalchemy import case, select, update
 from sqlalchemy.engine import Engine
 
 from ..db import sessions, utcnow
@@ -38,19 +38,21 @@ class SessionStore:
         client_session_ref = (client_session_ref or "").strip() or "default"
         now = utcnow()
         with self.engine.begin() as conn:
+            # The common case is a session that already exists — every turn of
+            # every conversation lands here. Touching it and reading it back in
+            # one statement halves that cost; the row is returned post-update, so
+            # what the caller sees is what is now stored.
             row = conn.execute(
-                select(sessions).where(
+                update(sessions)
+                .where(
                     sessions.c.project_id == project_id,
                     sessions.c.user_id == user_id,
                     sessions.c.client_session_ref == client_session_ref,
                 )
+                .values(last_seen_at=now, agent_connection_id=agent_connection_id)
+                .returning(*sessions.c)
             ).first()
             if row:
-                conn.execute(
-                    update(sessions)
-                    .where(sessions.c.id == row.id)
-                    .values(last_seen_at=now, agent_connection_id=agent_connection_id)
-                )
                 return _row_to_session(row._mapping)
             session_id = str(uuid.uuid4())
             conn.execute(
@@ -86,17 +88,27 @@ class SessionStore:
         return _row_to_session(row._mapping) if row else None
 
     def advance_watermark(self, session_id: str, revision: int, task: str = "") -> None:
-        """Move the watermark forward only. Never rewinds on a stale known_revision."""
+        """Move the watermark forward only. Never rewinds on a stale revision.
+
+        The forward-only rule is expressed in the UPDATE rather than as a read
+        then a write. That is one round trip instead of two, and it also closes
+        the window where two syncs of the same session could each read the old
+        watermark and the later one write back the lower number — which would
+        redeliver changes the agent had already been given.
+        """
         now = utcnow()
+        revision = int(revision)
+        keep_the_higher = case(
+            (sessions.c.last_seen_revision > revision, sessions.c.last_seen_revision),
+            else_=revision,
+        )
         with self.engine.begin() as conn:
-            row = conn.execute(
-                select(sessions.c.last_seen_revision).where(sessions.c.id == session_id)
-            ).first()
-            if row is None:
-                return
-            new_rev = max(int(row.last_seen_revision), int(revision))
             conn.execute(
                 update(sessions)
                 .where(sessions.c.id == session_id)
-                .values(last_seen_revision=new_rev, last_task=task, last_seen_at=now)
+                .values(
+                    last_seen_revision=keep_the_higher,
+                    last_task=task,
+                    last_seen_at=now,
+                )
             )

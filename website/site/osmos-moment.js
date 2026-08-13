@@ -63,8 +63,13 @@
     chipEl.setAttribute("data-visible", "false");
   }
 
-  /* The revision flips rather than fading. It is a counter, and a counter that
-     cross-fades reads as a value being corrected instead of advanced. */
+  /* The counter flips rather than fading. It is a counter, and a counter that
+     cross-fades reads as a value being corrected instead of advanced.
+
+     It is the only place a revision number appears on the site: here it is
+     motion — visible proof that something landed — rather than a concept the
+     reader has to learn before they can buy anything. Nothing in the copy
+     explains it, and nothing should. */
   function bumpRev(value) {
     revEl.setAttribute("data-bump", "true");
     later(function () { revEl.textContent = value; }, 180);
@@ -80,11 +85,11 @@
     else destEl.removeAttribute("data-arrived");
     destCard.setAttribute("data-active", withOsmos ? "true" : "false");
     chipEl.setAttribute("data-visible", withOsmos ? "true" : "false");
-    if (withOsmos && chipText) chipText.textContent = "Used from Osmos · Sam / ChatGPT · r42";
+    if (withOsmos && chipText) chipText.textContent = "Used from Osmos · Sam / ChatGPT";
     root.setAttribute("data-phase", withOsmos ? "done" : "idle");
     say(withOsmos
-      ? "Handoff complete — ChatGPT to Claude, revision r42."
-      : "No shared context. The second agent guessed.");
+      ? "Handoff complete — Sam's ChatGPT to Matthew's Claude."
+      : "No shared project. The second assistant guessed.");
   }
 
   function play() {
@@ -97,7 +102,7 @@
 
     /* A short capture beat before the pulse leaves. Without it the decision
        appears to originate on the axis rather than in the conversation. */
-    say("Sam's agent publishes the decision…");
+    say("Sam's assistant publishes the decision…");
     root.setAttribute("data-phase", "capture");
 
     later(function () {
@@ -111,7 +116,7 @@
         }, i * step);
       });
 
-      later(function () { bumpRev("r42"); say("Revision r42 recorded."); }, HANDOFF * 0.55);
+      later(function () { bumpRev("r42"); say("Recorded in the shared project."); }, HANDOFF * 0.55);
       later(function () { settle(true, true); }, HANDOFF);
     }, 320);
   }

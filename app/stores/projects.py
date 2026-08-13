@@ -678,6 +678,32 @@ class ProjectStore:
         )
         return next_rev
 
+    def revision_and_member_count(self, project_id: str) -> tuple[int, int]:
+        """The two facts the context banner states, in one round trip.
+
+        Every sync prints the head revision and how many people share the
+        context. That was a revision select plus list_members() — a join that
+        materialised every member row so the caller could take len() of it. Two
+        scalar subqueries in one statement answer both and read nothing else.
+        A context that does not exist reads as (0, 0), exactly as the two
+        separate calls did.
+        """
+        with self.engine.begin() as conn:
+            row = conn.execute(
+                select(
+                    select(projects.c.context_revision)
+                    .where(projects.c.id == project_id)
+                    .scalar_subquery()
+                    .label("revision"),
+                    select(func.count())
+                    .select_from(memberships)
+                    .where(memberships.c.project_id == project_id)
+                    .scalar_subquery()
+                    .label("member_count"),
+                )
+            ).first()
+        return int(row.revision or 0), int(row.member_count or 0)
+
     def current_revision(self, project_id: str) -> int:
         with self.engine.begin() as conn:
             row = conn.execute(

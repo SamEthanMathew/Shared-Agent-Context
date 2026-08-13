@@ -25,6 +25,10 @@ HANDLED = (
     "customer.subscription.deleted",
 )
 
+# Statuses a subscription never comes back from. A workspace in one of these has
+# genuinely left, and no later event should quietly restore its entitlement.
+ENDED_STATUSES = frozenset({"canceled", "incomplete_expired"})
+
 
 def _ts(value: Any) -> datetime | None:
     if not value:
@@ -35,19 +39,41 @@ def _ts(value: Any) -> datetime | None:
         return None
 
 
+def _subscription_details(obj: dict[str, Any]) -> dict[str, Any]:
+    """An invoice's subscription, wherever this API version keeps it.
+
+    API version 2025-03-31.basil removed `subscription` from the Invoice object
+    and moved it — with the subscription's own metadata, which is where our
+    `osmos_org_id` marker lives — under `parent.subscription_details`.
+    """
+    parent = obj.get("parent") or {}
+    return parent.get("subscription_details") or {}
+
+
 def _org_from(store, obj: dict[str, Any]) -> str | None:
     """Identify the workspace an event belongs to.
 
     Three routes, most reliable first: metadata we set when creating the object,
     the subscription we recorded, then the customer. Any one of them is enough,
     and having three means a partially-written link still resolves.
+
+    Invoices need the `parent` lookups as well as the plain ones: on a current
+    API version an invoice carries no metadata of its own and no top-level
+    subscription, so without them the first two routes silently do nothing and
+    an invoice for a workspace we have not linked a customer to yet is dropped.
     """
+    details = _subscription_details(obj)
+
     metadata = obj.get("metadata") or {}
-    org_id = metadata.get("osmos_org_id") or obj.get("client_reference_id")
+    org_id = (
+        metadata.get("osmos_org_id")
+        or obj.get("client_reference_id")
+        or (details.get("metadata") or {}).get("osmos_org_id")
+    )
     if org_id:
         return org_id
 
-    subscription = obj.get("subscription")
+    subscription = obj.get("subscription") or details.get("subscription")
     if isinstance(subscription, str):
         record = store.billing.by_subscription(subscription)
         if record:
@@ -75,7 +101,14 @@ def _subscription_fields(subscription: dict[str, Any]) -> dict[str, Any]:
         "quantity": quantity,
         "interval": interval,
         "status": subscription.get("status"),
-        "current_period_end": _ts(subscription.get("current_period_end")),
+        # The billing period moved from the subscription onto each of its items
+        # in API version 2025-03-31.basil. Reading only the old location leaves
+        # every workspace with no renewal date at all, which is silent: there is
+        # no error, the column simply stays NULL forever.
+        "current_period_end": _ts(
+            first.get("current_period_end")
+            or subscription.get("current_period_end")
+        ),
         "cancel_at_period_end": bool(subscription.get("cancel_at_period_end")),
     }
 
@@ -124,7 +157,18 @@ def _on_invoice_paid(store, obj: dict[str, Any], org_id: str) -> None:
     """Money arrived: confirm entitlement and clear any failure flag."""
     store.billing.clear_payment_failure(org_id)
     record = store.billing.get(org_id) or {}
-    if record.get("plan") != PRO and record.get("stripe_subscription_id"):
+    # Grant Pro when an invoice is paid for a workspace we have not marked paid —
+    # this is what rescues a workspace whose checkout.session.completed was lost.
+    # But not when the subscription has already ended: Stripe does not order its
+    # deliveries, and the final invoice of a cancelled subscription is paid at
+    # almost the same moment it ends, so this event routinely arrives *after*
+    # the cancellation. Without the guard that straggler silently put a departed
+    # workspace back on Pro, because downgrade keeps the subscription id.
+    if (
+        record.get("plan") != PRO
+        and record.get("stripe_subscription_id")
+        and record.get("subscription_status") not in ENDED_STATUSES
+    ):
         store.billing.set_plan(org_id, PRO)
     store.audit.emit("billing.invoice_paid", "organisation", org_id)
 
@@ -158,7 +202,7 @@ def _on_subscription_updated(store, obj: dict[str, Any], org_id: str) -> None:
     """Status, quantity, interval, or cancellation state changed."""
     fields = _subscription_fields(obj)
     # A subscription that has actually ended should not leave the plan at Pro.
-    plan = FREE if fields["status"] in ("canceled", "incomplete_expired") else PRO
+    plan = FREE if fields["status"] in ENDED_STATUSES else PRO
     store.billing.apply_subscription(
         org_id,
         subscription_id=obj.get("id"),

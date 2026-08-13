@@ -2,7 +2,8 @@
 
 Doubles as the privacy manifest (privacy doc §10): included memories with the
 section they landed in, plus excluded memories with the reason they were
-withheld (budget, or an aggregate count of other users' private memories).
+withheld (budget, or an aggregate count of other users' private memories), plus
+the funnel — the stage-by-stage count of everything that did not make it in.
 """
 from __future__ import annotations
 
@@ -10,7 +11,7 @@ import uuid
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection, Engine
 
 from ..db import context_snapshots, utcnow
 
@@ -32,26 +33,41 @@ class SnapshotStore:
         included: list[dict[str, Any]],
         excluded: list[dict[str, Any]],
         compiler_policy: str = "lexical_v1",
+        funnel: dict[str, Any] | None = None,
+        conn: Connection | None = None,
     ) -> str:
+        """Record what one compile returned.
+
+        Takes an optional live connection, like AuditStore.emit, so the snapshot
+        and the audit row that announces it commit together instead of as two
+        transactions on the sync hot path.
+
+        ``funnel`` is the stage-by-stage count of what happened to everything
+        that did NOT get in — see app/context.py. Defaulted so a caller that
+        predates it still writes a valid row.
+        """
         snapshot_id = str(uuid.uuid4())
-        with self.engine.begin() as conn:
-            conn.execute(
-                context_snapshots.insert().values(
-                    id=snapshot_id,
-                    project_id=project_id,
-                    session_id=session_id,
-                    user_id=user_id,
-                    agent_connection_id=agent_connection_id,
-                    project_revision=project_revision,
-                    task=task,
-                    budget_tokens=budget_tokens,
-                    token_estimate=token_estimate,
-                    included=included,
-                    excluded=excluded,
-                    compiler_policy=compiler_policy,
-                    created_at=utcnow(),
-                )
-            )
+        stmt = context_snapshots.insert().values(
+            id=snapshot_id,
+            project_id=project_id,
+            session_id=session_id,
+            user_id=user_id,
+            agent_connection_id=agent_connection_id,
+            project_revision=project_revision,
+            task=task,
+            budget_tokens=budget_tokens,
+            token_estimate=token_estimate,
+            included=included,
+            excluded=excluded,
+            funnel=funnel or {},
+            compiler_policy=compiler_policy,
+            created_at=utcnow(),
+        )
+        if conn is not None:
+            conn.execute(stmt)
+        else:
+            with self.engine.begin() as own:
+                own.execute(stmt)
         return snapshot_id
 
     def list_for_user(
@@ -78,7 +94,15 @@ class SnapshotStore:
             m = dict(r._mapping)
             included = m.get("included") or []
             excluded = m.get("excluded") or []
+            funnel = m.get("funnel") or {}
             out.append({
+                # Whether this sync was cut short, at a glance: a row that had to
+                # leave memory out is the one worth opening, and requiring
+                # someone to open every row to find it is how it goes unnoticed.
+                "truncated": bool(
+                    funnel.get("dropped_budget")
+                    or funnel.get("budget_unsatisfiable")
+                ),
                 "id": m["id"],
                 "task": m["task"],
                 "project_revision": m["project_revision"],

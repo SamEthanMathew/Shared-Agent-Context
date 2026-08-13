@@ -194,8 +194,12 @@ def ensure_catalogue() -> dict[str, str]:
     stripe = _stripe()
     marker = {"osmos_catalogue": "pro"}
 
+    # Walk every page, not just the first. Stripe caps a list response at 100,
+    # so an account that sells anything else can push the Osmos product out of
+    # sight — and the failure is a duplicate product with a duplicate pair of
+    # prices, created silently, with customers split across the two.
     product = None
-    for candidate in stripe.Product.list(active=True, limit=100)["data"]:
+    for candidate in stripe.Product.list(active=True, limit=100).auto_paging_iter():
         if (candidate.get("metadata") or {}).get("osmos_catalogue") == "pro":
             product = candidate
             break
@@ -208,7 +212,11 @@ def ensure_catalogue() -> dict[str, str]:
             metadata=marker,
         )
 
-    existing = stripe.Price.list(product=product["id"], active=True, limit=100)["data"]
+    existing = list(
+        stripe.Price.list(
+            product=product["id"], active=True, limit=100
+        ).auto_paging_iter()
+    )
 
     def _find(interval: str, amount: int):
         for price in existing:

@@ -388,6 +388,14 @@ memories = Table(
     Column("summary", Text, nullable=False),
     Column("details", Text, nullable=False, default=""),
     Column("tags", Text, nullable=False, default=""),
+    # Retrieval index: summary + tags + kind, tokenised and de-duplicated once at
+    # write time, in the order the author wrote them (rank() measures how close
+    # two matched words are, which needs the order). One column serves both
+    # dialects — Postgres builds a tsvector from it through the GIN expression
+    # index added in migration 0008, SQLite scans it. `details` is deliberately
+    # not in here: a 20,000-character body dilutes a lexical match rather than
+    # sharpening it, and a caller who wants a body asks for that memory by id.
+    Column("search_text", Text, nullable=False, default=""),
     Column("status", String(24), nullable=False, default="active"),
     Column("importance", Float, nullable=False, default=0.5),
     Column("confidence", Float, nullable=False, default=0.7),
@@ -471,6 +479,12 @@ context_snapshots = Table(
     Column("token_estimate", Integer, nullable=False),
     Column("included", JSON, nullable=False, default=list),
     Column("excluded", JSON, nullable=False, default=list),
+    # The funnel: counts for every stage between "the context holds this" and
+    # "the model was shown this" — considered, filtered by permission, beaten in
+    # ranking, faded, dropped for budget. `included` and `excluded` enumerate
+    # rows; this counts the ones that never became rows, which is what makes
+    # "why didn't my agent know that?" answerable. See app/context.py.
+    Column("funnel", JSON, nullable=False, default=dict),
     Column("compiler_policy", String(64), nullable=False, default="lexical_v1"),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Index("ix_snapshots_project_created", "project_id", "created_at"),

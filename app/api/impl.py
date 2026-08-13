@@ -170,7 +170,6 @@ def sync_context(
     task: str,
     session_ref: str,
     local_context_delta: str = "",
-    known_revision: int | None = None,
     budget_tokens: int = 3000,
     delta_scope: str = "shared",
 ) -> dict[str, Any]:
@@ -190,13 +189,23 @@ def sync_context(
             session_id=session.id,
             internal_kind=True,
         )
-        # re-read the session so the delta counts as an unseen change if others sync
-        session = store.sessions.get(session.id) or session
+        # No re-read of the session here: remember() writes memories, evidence
+        # and audit, never the sessions table, so the row is exactly the one
+        # already in hand. The delta reaches other members through the change
+        # feed, which reads memories — not through this record.
 
     result = compile_context(store, identity, session, task, budget_tokens)
+    result["session_id"] = session.id
+    if result.get("error") == "budget_unsatisfiable":
+        # No context was delivered, so this session has not seen these revisions.
+        # Advancing the watermark here would mark the changes it could not be
+        # given as already handed over, and they would never be offered again —
+        # turning a loud, retryable failure into the silent loss it exists to
+        # prevent. `ok` is already False; the caller raises budget_tokens and
+        # calls again.
+        return result
     store.sessions.advance_watermark(session.id, result["new_session_revision"], task)
     result["ok"] = True
-    result["session_id"] = session.id
     return result
 
 

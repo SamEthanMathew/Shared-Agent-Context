@@ -182,6 +182,10 @@ def register(mcp) -> None:
         task: str,
         session_ref: str = "default",
         local_context_delta: str = "",
+        # Accepted and ignored. The watermark is server-side per-session state,
+        # so a client's idea of the revision has never been read; the parameter
+        # stays because connected clients hold a cached copy of this tool's
+        # schema and would fail the call outright if it disappeared.
         known_revision: int | None = None,
         budget_tokens: int = 3000,
         delta_scope: str = "shared",
@@ -200,7 +204,6 @@ def register(mcp) -> None:
                 get_store(), identity,
                 task=task, session_ref=session_ref,
                 local_context_delta=local_context_delta,
-                known_revision=known_revision,
                 budget_tokens=budget_tokens, delta_scope=delta_scope,
             )
             out["active_context"] = identity.active_context()

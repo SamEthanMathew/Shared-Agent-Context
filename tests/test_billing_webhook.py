@@ -267,6 +267,81 @@ def test_a_terminal_status_in_an_update_also_downgrades(seed, workspace):
     assert seed.store.billing.get(workspace["id"])["plan"] == FREE
 
 
+def test_a_late_invoice_paid_does_not_resurrect_a_cancelled_workspace(
+    seed, workspace
+):
+    """The bug this test exists for, found running against a real account.
+
+    Stripe does not order deliveries, and the final invoice of a cancelled
+    subscription is paid at almost the same moment the subscription ends — so
+    `invoice.paid` routinely lands *after* `customer.subscription.deleted`.
+
+    `_on_invoice_paid` re-granted Pro to any workspace that was not currently Pro
+    but still had a subscription id, and `downgrade_to_free` deliberately keeps
+    those ids as purchase history. So the straggler flipped `plan` back to `pro`
+    on a workspace that had genuinely left. Entitlement happened to survive it
+    because `plan_from_record` also weighs the cancelled status, but the row was
+    then self-contradictory, and `sync_seats` — which skips only Free workspaces
+    — would go on pushing seat counts at a dead subscription on every membership
+    change, failing every time.
+    """
+    webhook.handle(
+        seed.store,
+        _event(
+            "checkout.session.completed",
+            {
+                "id": "cs_1", "customer": "cus_acme", "subscription": "sub_1",
+                "metadata": {"osmos_org_id": workspace["id"]},
+            },
+        ),
+    )
+    webhook.handle(
+        seed.store,
+        _event(
+            "customer.subscription.deleted",
+            _subscription(workspace["id"], status="canceled"),
+            event_id="evt_gone",
+        ),
+    )
+    assert seed.store.billing.get(workspace["id"])["plan"] == FREE
+
+    webhook.handle(
+        seed.store,
+        _event(
+            "invoice.paid",
+            {"id": "in_final", "customer": "cus_acme", "subscription": "sub_1"},
+            event_id="evt_late_paid",
+        ),
+    )
+    record = seed.store.billing.get(workspace["id"])
+    assert record["plan"] == FREE
+    assert seed.store.billing.effective_plan(workspace["id"]).name == FREE
+
+
+def test_an_invoice_paid_still_rescues_a_workspace_whose_checkout_was_lost(
+    seed, workspace
+):
+    """The case the resurrection guard must not break.
+
+    If `checkout.session.completed` never arrives, `invoice.paid` is the only
+    signal that a workspace has paid, and it must still grant Pro. The guard is
+    on the subscription being *finished*, not on it being unknown.
+    """
+    seed.store.billing.apply_subscription(
+        workspace["id"], subscription_id="sub_1", price_id="price_m",
+        status=None, quantity=1, interval="month",
+    )
+    webhook.handle(
+        seed.store,
+        _event(
+            "invoice.paid",
+            {"id": "in_first", "customer": "cus_acme", "subscription": "sub_1"},
+            event_id="evt_rescue",
+        ),
+    )
+    assert seed.store.billing.get(workspace["id"])["plan"] == PRO
+
+
 # --- the HTTP endpoint ------------------------------------------------------
 
 

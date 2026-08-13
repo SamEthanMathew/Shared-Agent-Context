@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pricing — Osmos</title>
+<meta name="description" content="Free for your first project. Pro is $8 per person per month, or $84 a year. Nothing is ever deleted for a billing reason, and a failed payment gets a fortnight, not a shutoff.">
+<link rel="canonical" href="https://withosmos.com/pricing">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Pricing — Osmos">
+<meta property="og:description" content="Free for your first project. Pro is $8 per person per month.">
+<meta property="og:image" content="https://withosmos.com/assets/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<meta name="color-scheme" content="dark light">
+<script src="/boot.js"></script>
+<link rel="stylesheet" href="/osmos.css">
+<link rel="stylesheet" href="/styles.css">
+
+<!--
+  Every number on this page mirrors app/billing/plans.py — PRO_MONTHLY_CENTS,
+  PRO_ANNUAL_CENTS, the Free entitlements in PLANS[FREE], and grace_days().
+  tests/test_site.py reads them from that module and fails if this page drifts,
+  because a price the checkout won't honour is worse than no price at all.
+-->
+</head>
+
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="nav" id="nav">
+  <div class="container nav__inner">
+    <a class="nav__brand" href="/" aria-label="Osmos home">
+      <img class="nav__mark" src="/assets/osmos-mark-dark.svg" alt="" width="28" height="28">
+      <span class="nav__word">OSMOS</span>
+    </a>
+    <nav class="nav__links" aria-label="Primary">
+      <a class="nav__link" href="/#contexts">Contexts</a>
+      <a class="nav__link" href="/#sharing">Sharing</a>
+      <a class="nav__link" href="/pricing" aria-current="page">Pricing</a>
+      <a class="nav__link" href="/security">Security</a>
+    </nav>
+    <div class="nav__actions">
+      <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch theme">
+        <svg class="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+      <a class="nav__link nav__link--action" href="/auth/login">Sign in</a>
+      <a class="btn btn--primary btn--sm" href="/auth/signup" data-osmos-event="signup_click">Start free</a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+
+  <section class="hero">
+    <div class="container">
+      <div class="hero__inner">
+        <h1 class="t-hero hero__title">Start free. Pay when it's carrying your team.</h1>
+        <p class="t-lead hero__lead">One price per person, whatever they connect. No per-assistant fee, no per-question fee, and no card to start.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section--tight" aria-labelledby="plans-h">
+    <div class="container">
+      <h2 class="visually-hidden" id="plans-h">Plans</h2>
+
+      <div class="plans" data-reveal-group>
+
+        <article class="plan" data-reveal>
+          <h3 class="plan__name">Free</h3>
+          <p class="plan__price"><span class="plan__amount">$0</span></p>
+          <p class="plan__note">For one project, on your own or with a couple of people.</p>
+          <ul class="plan__list">
+            <li class="plan__item">1 context</li>
+            <li class="plan__item">Up to 3 people</li>
+            <li class="plan__item">Up to 3 connected assistants</li>
+            <li class="plan__item">500 times a month an assistant can pick up the project's memory</li>
+            <li class="plan__item">Sharing, private notes, and the record of what each assistant saw — all of it</li>
+          </ul>
+          <a class="btn btn--secondary plan__cta" href="/auth/signup" data-osmos-event="signup_click">Start free</a>
+        </article>
+
+        <article class="plan plan--feature" data-reveal>
+          <h3 class="plan__name">Pro</h3>
+          <p class="plan__price">
+            <span class="plan__amount">$8</span>
+            <span class="plan__per">per person, per month</span>
+          </p>
+          <p class="plan__note">Or $84 a year per person — about $7 a month.</p>
+          <ul class="plan__list">
+            <li class="plan__item">Unlimited contexts</li>
+            <li class="plan__item">Unlimited people</li>
+            <li class="plan__item">Unlimited connected assistants</li>
+            <li class="plan__item">No monthly cap on picking up project memory</li>
+            <li class="plan__item">Everything in Free, for a whole workspace</li>
+          </ul>
+          <a class="btn btn--primary plan__cta" href="/auth/signup" data-osmos-event="signup_click">Start free, upgrade later</a>
+        </article>
+
+        <article class="plan" data-reveal>
+          <h3 class="plan__name">Enterprise</h3>
+          <p class="plan__price"><span class="plan__amount">Custom</span></p>
+          <p class="plan__note">For organisations with procurement, invoicing, or a scale that needs talking about.</p>
+          <ul class="plan__list">
+            <li class="plan__item">Everything in Pro</li>
+            <li class="plan__item">Invoicing and annual terms</li>
+            <li class="plan__item">Arranged by hand, with a person</li>
+          </ul>
+          <!-- No contact address here on purpose: there isn't a monitored one
+               yet, and a link that bounces is worse than none. Replace this CTA
+               with the real address the day that mailbox exists. -->
+          <a class="btn btn--secondary plan__cta" href="/auth/signup" data-osmos-event="signup_click">Start free, then talk to us</a>
+        </article>
+
+      </div>
+
+      <p class="t-small mt-5 center">Prices in US dollars. A seat is a person, not an assistant — connect as many of your own as you like.</p>
+    </div>
+  </section>
+
+  <!-- ================= What billing will never do ================= -->
+  <section class="section" aria-labelledby="promise-h">
+    <div class="container">
+      <div class="section__head" data-reveal>
+        <span class="eyebrow">How billing behaves</span>
+        <h2 class="t-h2" id="promise-h">Your project memory is not leverage.</h2>
+        <p class="t-lead mt-4">A memory layer you can be locked out of is not somewhere you would put anything that matters. So the billing rules are written down here, and they are the rules the code actually follows.</p>
+      </div>
+
+      <div class="deflist" data-reveal>
+        <div class="deflist__row">
+          <span class="deflist__term">Nothing is ever deleted for a billing reason</span>
+          <span class="t-body">Not on downgrade, not on cancellation, not when a card expires. Going over a Free limit stops you adding more — it never removes what you already wrote.</span>
+        </div>
+        <div class="deflist__row">
+          <span class="deflist__term">Cancelling runs to the end of what you paid for</span>
+          <span class="t-body">You keep Pro until the period you've already paid for ends, then the workspace returns to the Free limits with every context and every memory intact. Upgrade again and everything beyond the free allowance is there, exactly as you left it.</span>
+        </div>
+        <div class="deflist__row">
+          <span class="deflist__term">A failed payment gets 14 days, not a shutoff</span>
+          <span class="t-body">An expired card is not a decision to leave. Service continues for a fortnight while you sort it out, which is long enough for a holiday and a finance department.</span>
+        </div>
+        <div class="deflist__row">
+          <span class="deflist__term">Seats follow your team on their own</span>
+          <span class="t-body">Adding someone adds their seat and charges the part of the month they'll use. Removing someone ends their access straight away and lets the seat count fall at renewal, because that one is already paid for. You never reconcile a number by hand.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= Questions ================= -->
+  <section class="section" aria-labelledby="pfaq-h">
+    <div class="container">
+      <div class="section__head" data-reveal>
+        <h2 class="t-h2" id="pfaq-h">Questions</h2>
+      </div>
+      <div class="faq" data-reveal>
+        <details class="faq__item">
+          <summary>Do I need a card to start?</summary>
+          <div class="faq__answer"><p class="t-body">No. Free is a real plan rather than a trial that expires, and you are never asked for a card until you choose to go to Pro.</p></div>
+        </details>
+        <details class="faq__item">
+          <summary>Am I charged per assistant?</summary>
+          <div class="faq__answer"><p class="t-body">No. You pay per person. One person can connect Claude, ChatGPT, and anything else they use for one seat — which is the whole point of the product.</p></div>
+        </details>
+        <details class="faq__item">
+          <summary>What happens if I hit a Free limit?</summary>
+          <div class="faq__answer"><p class="t-body">Osmos tells you which limit it was and what to do about it. Everything you already have keeps working — the limit stops the next addition, not the project.</p></div>
+        </details>
+        <details class="faq__item">
+          <summary>Can I pay yearly?</summary>
+          <div class="faq__answer"><p class="t-body">Yes — $84 per person per year instead of $8 a month, so about $7 a month. You can switch between the two.</p></div>
+        </details>
+        <details class="faq__item">
+          <summary>Is my project memory used to train a model?</summary>
+          <div class="faq__answer"><p class="t-body">No. It is never sent to any third party, on any plan. See <a href="/security">what stays private</a>.</p></div>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <section class="section final" aria-labelledby="p-final-h">
+    <div class="container">
+      <div class="final__flow" aria-hidden="true"></div>
+      <h2 class="t-h1 final__title" id="p-final-h">Try it on one project.</h2>
+      <p class="t-lead final__lead">If it doesn't change how your team works, it costs you nothing.</p>
+      <div class="btn-row final__ctas">
+        <a class="btn btn--primary" href="/auth/signup" data-osmos-event="signup_click">Start free</a>
+        <a class="btn btn--secondary" href="/get-started">See how it connects</a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <div class="container">
+    <div class="footer__bottom footer__bottom--bare">
+      <span>© 2026 Osmos</span>
+      <span><a class="footer__home" href="/">Home</a></span>
+    </div>
+  </div>
+</footer>
+
+<script src="/theme.js"></script>
+<script src="/motion.js"></script>
+</body>
+</html>

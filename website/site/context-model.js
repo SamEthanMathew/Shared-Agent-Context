@@ -1,14 +1,17 @@
-/* Scope model — two private contexts, one shared project.
+/* Private notes, one shared project.
    ---------------------------------------------------------------------------
-   Shows the thing that is hardest to explain in prose: each account reads the
-   shared layer plus its OWN private scope, and never the other person's.
+   Shows the thing that is hardest to explain in prose: each account reads what
+   the project shares plus its OWN private notes, and never the other person's.
 
-   Accuracy note that shapes this component: private memory is not "promoted"
-   into shared. sac_remember_private and sac_remember_shared are separate
-   writes — the agent routes each piece of knowledge to one scope or the other.
-   So the buttons publish to a destination; nothing ever migrates between the
-   two. Mirroring the real data model matters more here than a prettier
-   animation would. */
+   Accuracy note that shapes this component: a private note is never "promoted"
+   into the shared project. Publishing and noting privately are separate acts —
+   the assistant sends each piece of knowledge to one place or the other, and
+   nothing migrates between them afterwards. Mirroring the real data model
+   matters more here than a prettier animation would.
+
+   The status line is read aloud by screen readers, so it says what happened in
+   the same words the page uses. It deliberately avoids naming the machinery
+   underneath — the visitor is deciding whether to trust this, not maintain it. */
 (function () {
   "use strict";
 
@@ -18,14 +21,11 @@
   var zoneA   = document.getElementById("zone-a");
   var zoneB   = document.getElementById("zone-b");
   var shared  = document.getElementById("zone-shared");
-  var revEl   = document.getElementById("scope-rev");
   var status  = document.getElementById("ctx-status");
   var viewA   = document.getElementById("ctx-view-a");
   var viewB   = document.getElementById("ctx-view-b");
   var cardA   = root.querySelector('[data-zone="a"]');
   var cardB   = root.querySelector('[data-zone="b"]');
-
-  var rev = 42;
 
   /* Queued so repeated clicks stay meaningful rather than repeating one line. */
   var SHARED_QUEUE = [
@@ -64,18 +64,16 @@
     var item = SHARED_QUEUE[sharedI % SHARED_QUEUE.length];
     sharedI++;
     shared.appendChild(makeMem(item, "shared", "Person A"));
-    rev++;
-    revEl.textContent = "r" + rev;
-    say("Person A published a " + item.kind + " to the shared layer. Revision r" + rev +
-        " — Person B's next sync includes it, with no message sent.");
+    say("Person A published a " + item.kind + " to the shared project. " +
+        "Person B's assistant has it from here on, with no message sent.");
   }
 
   function savePrivate() {
     var item = PRIVATE_QUEUE[privateI % PRIVATE_QUEUE.length];
     privateI++;
     zoneA.appendChild(makeMem(item, "private"));
-    say("Saved to Person A's private scope. The revision does not move, and " +
-        "Person B never receives it.");
+    say("Saved as one of Person A's private notes. Nothing about the shared " +
+        "project changed, and Person B never receives it.");
   }
 
   function setViewer(who) {
@@ -97,13 +95,13 @@
     if (lockB) lockB.hidden = next !== "a";
 
     if (next === "a") {
-      say("Person A's agent receives the shared layer plus Person A's own private scope. " +
-          "Person B's private notes are filtered out in SQL — they are never selected.");
+      say("Person A's assistant reads the shared project plus Person A's own notes. " +
+          "Person B's private notes never reach it at all.");
     } else if (next === "b") {
-      say("Person B's agent receives the shared layer plus Person B's own private scope. " +
-          "Person A's private notes are filtered out in SQL — they are never selected.");
+      say("Person B's assistant reads the shared project plus Person B's own notes. " +
+          "Person A's private notes never reach it at all.");
     } else {
-      say("Both accounts read the shared layer. Neither can read the other's private scope.");
+      say("Both accounts read the shared project. Neither can read the other's private notes.");
     }
   }
 
@@ -111,12 +109,10 @@
     root.setAttribute("data-viewer", "none");
     setViewer("none");
     sharedI = privateI = 0;
-    rev = 42;
-    revEl.textContent = "r42";
     [].slice.call(root.querySelectorAll('.mem[data-new="true"]')).forEach(function (n) {
       n.parentNode.removeChild(n);
     });
-    say("Reset. Both accounts read the shared layer; neither can read the other's private scope.");
+    say("Reset. Both accounts read the shared project; neither can read the other's private notes.");
   }
 
   document.getElementById("ctx-publish").addEventListener("click", publishShared);

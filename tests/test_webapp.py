@@ -86,10 +86,16 @@ def test_asset_paths_cannot_read_files_outside_the_build(client, attempt):
         assert '<div id="root">' in r.text
 
 
-def test_the_bare_domain_sends_people_to_the_app(client):
+def test_the_bare_domain_no_longer_redirects_everyone_to_the_app(client):
+    """The root now serves the marketing site to a signed-out visitor.
+
+    It redirected unconditionally until Osmos became a hosted product, which
+    meant a stranger's first sight of the domain was a login form. The full
+    behaviour — including the redirect that a signed-in visitor still gets —
+    lives in tests/test_site.py, which owns that route.
+    """
     r = client.get("/")
-    assert r.status_code == 307
-    assert r.headers["location"] == "/app"
+    assert r.status_code == 200
 
 
 # --- must not shadow the OAuth surface ------------------------------------
