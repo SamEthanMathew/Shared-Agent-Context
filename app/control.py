@@ -105,9 +105,33 @@ def home(request: Request):
         )
     conn_rows = conn_rows or '<tr><td colspan="3" class="muted">No connected clients.</td></tr>'
 
+    archived = store.projects.list_archived_contexts(uid)
+    archived_block = ""
+    if archived:
+        arows = "".join(
+            f'<tr><td>{_esc(a["name"])}</td><td>{_esc(a["role"])}</td>'
+            f'<td>r{a["revision"]}</td><td>'
+            + (
+                f'<form class="inline" method="post" '
+                f'action="/console/c/{_esc(a["id"])}/unarchive">'
+                f'<button class="secondary" type="submit">Restore</button></form>'
+                if a["role"] == "owner" else ""
+            )
+            + "</td></tr>"
+            for a in archived
+        )
+        archived_block = (
+            "<h2>Archived</h2>"
+            '<p class="muted">Hidden from agents; memory is retained and restoring '
+            "brings it back.</p>"
+            f"<table><tr><th>Context</th><th>Role</th><th>Revision</th><th></th></tr>"
+            f"{arows}</table>"
+        )
+
     body = f"""<h1>Your shared contexts</h1>{notice}
 <table><tr><th>Context</th><th>Your access</th><th>Revision</th><th>Members</th></tr>
 {rows}</table>
+{archived_block}
 
 <h2>New context</h2>
 <form method="post" action="/console/contexts">
@@ -214,6 +238,15 @@ def context_page(project_id: str, request: Request, joined: str = ""):
             )
         return out or '<tr><td colspan="5" class="muted">Nothing yet.</td></tr>'
 
+    archive_block = ""
+    if identity.role == "owner":
+        archive_block = (
+            '<h2>Archive</h2><p class="muted">Hides this context from all agents. '
+            "Memory is kept and you can restore it later.</p>"
+            f'<form method="post" action="/console/c/{_esc(project_id)}/archive">'
+            '<button class="secondary" type="submit">Archive this context</button></form>'
+        )
+
     shared_mems = store.memories.list_memories(
         project_id, uid, scope="shared", status=None, limit=200
     )
@@ -246,7 +279,8 @@ def context_page(project_id: str, request: Request, joined: str = ""):
 
 <h2>Recent activity</h2>
 <table><tr><th>When</th><th>Action</th><th>Entity</th></tr>{audit_rows}</table>
-
+<p><a href="/console/c/{_esc(project_id)}/snapshots">What your agents saw →</a></p>
+{archive_block}
 <p class="muted"><a href="/console">← All contexts</a></p>"""
     return HTMLResponse(_wide_page(project.name, body))
 
@@ -277,6 +311,127 @@ def revoke(project_id: str, request: Request, user_id: str = Form(...)):
     except SACError as exc:
         return _error_page(exc, f"/console/c/{project_id}")
     return RedirectResponse(f"/console/c/{project_id}", status_code=303)
+
+
+@router.post("/c/{project_id}/archive")
+def archive(project_id: str, request: Request):
+    if not _user(request):
+        return RedirectResponse("/auth/login", status_code=303)
+    store = get_store()
+    try:
+        identity = _identity(request, project_id)
+        if identity.role != "owner":
+            return _forbidden()
+        store.projects.archive_project(project_id)
+        store.audit.emit("context.archive", "project", project_id,
+                         project_id=project_id, actor_user_id=identity.user_id)
+    except SACError as exc:
+        return _error_page(exc, f"/console/c/{project_id}")
+    return RedirectResponse("/console", status_code=303)
+
+
+@router.post("/c/{project_id}/unarchive")
+def unarchive(project_id: str, request: Request):
+    uid = _user(request)
+    if not uid:
+        return RedirectResponse("/auth/login", status_code=303)
+    store = get_store()
+    try:
+        identity = store.resolve_identity(
+            Principal(uid, None, (READ_SCOPE, WRITE_SCOPE)),
+            project_id, allow_archived=True,
+        )
+        if identity.role != "owner":
+            return _forbidden()
+        store.projects.unarchive_project(project_id)
+        store.audit.emit("context.unarchive", "project", project_id,
+                         project_id=project_id, actor_user_id=identity.user_id)
+    except SACError as exc:
+        return _error_page(exc, "/console")
+    return RedirectResponse(f"/console/c/{project_id}", status_code=303)
+
+
+@router.get("/c/{project_id}/snapshots", response_class=HTMLResponse)
+def snapshots_page(project_id: str, request: Request):
+    """What your agents were actually shown — the privacy manifest per sync."""
+    store = get_store()
+    uid = _user(request)
+    if not uid:
+        return RedirectResponse(
+            f"/auth/login?next=/console/c/{project_id}/snapshots", status_code=303
+        )
+    try:
+        identity = _identity(request, project_id)
+    except SACError:
+        return _forbidden()
+
+    snaps = store.snapshots.list_for_user(project_id, uid, limit=50)
+    rows = "".join(
+        f'<tr><td class="muted">{_esc(s["created_at"])}</td>'
+        f'<td>{_esc((s["task"] or "")[:70])}</td>'
+        f'<td>r{s["project_revision"]}</td>'
+        f'<td>{s["included_count"]}</td>'
+        f'<td>{s["excluded_count"]}</td>'
+        f'<td>{s["withheld_private"] or "—"}</td>'
+        f'<td>~{s["token_estimate"]}/{s["budget_tokens"]}</td>'
+        f'<td><a href="/console/c/{_esc(project_id)}/snapshots/{_esc(s["id"])}">view</a></td>'
+        "</tr>"
+        for s in snaps
+    ) or '<tr><td colspan="8" class="muted">No syncs recorded yet.</td></tr>'
+
+    body = f"""<h1>What your agents saw</h1>
+<p class="muted">One row per sync in <b>{_esc(identity.context_name)}</b>. These are
+your own records only — a snapshot lists the exact memories fed to your agent,
+including your private ones, so other members cannot see them.</p>
+<table><tr><th>When</th><th>Task</th><th>Rev</th><th>Included</th><th>Excluded</th>
+<th>Private withheld</th><th>Tokens</th><th></th></tr>{rows}</table>
+<p class="muted"><a href="/console/c/{_esc(project_id)}">← Back to context</a></p>"""
+    return HTMLResponse(_wide_page("Agent transparency", body))
+
+
+@router.get("/c/{project_id}/snapshots/{snapshot_id}", response_class=HTMLResponse)
+def snapshot_detail(project_id: str, snapshot_id: str, request: Request):
+    store = get_store()
+    uid = _user(request)
+    if not uid:
+        return RedirectResponse("/auth/login", status_code=303)
+    try:
+        _identity(request, project_id)
+    except SACError:
+        return _forbidden()
+
+    snap = store.snapshots.get(snapshot_id)
+    if not snap or snap["project_id"] != project_id or snap["user_id"] != uid:
+        return _forbidden()
+
+    def mem_rows(entries, is_included):
+        out = ""
+        for e in entries:
+            mid = e.get("memory_id")
+            if not mid:
+                # aggregate entries (e.g. "N private memories withheld")
+                out += (
+                    f'<tr><td colspan="2" class="muted">{_esc(e.get("count", "?"))} '
+                    f'× {_esc(e.get("reason", "withheld"))}</td></tr>'
+                )
+                continue
+            m = store.memories.get_memory(project_id, mid, uid)
+            summary = _esc(m.summary[:80]) if m else '<span class="muted">(not visible)</span>'
+            tail = e.get("section") if is_included else e.get("reason")
+            out += f"<tr><td>{summary}</td><td class='muted'>{_esc(tail)}</td></tr>"
+        return out or '<tr><td colspan="2" class="muted">None</td></tr>'
+
+    body = f"""<h1>Sync record</h1>
+<p class="muted">{_esc(snap["created_at"])} · revision r{snap["project_revision"]}
+· ~{snap["token_estimate"]} of {snap["budget_tokens"]} tokens
+· policy <code>{_esc(snap["compiler_policy"])}</code></p>
+<h2>Task</h2><p>{_esc(snap["task"] or "(none)")}</p>
+<h2>Included ({len(snap["included"] or [])})</h2>
+<table><tr><th>Memory</th><th>Section</th></tr>{mem_rows(snap["included"] or [], True)}</table>
+<h2>Withheld ({len(snap["excluded"] or [])})</h2>
+<table><tr><th>Memory</th><th>Reason</th></tr>{mem_rows(snap["excluded"] or [], False)}</table>
+<p class="muted"><a href="/console/c/{_esc(project_id)}/snapshots">← All sync records</a></p>"""
+    return HTMLResponse(_wide_page("Sync record", body))
 
 
 @router.post("/c/{project_id}/memories/{memory_id}/retract")

@@ -37,9 +37,14 @@ class SACStore:
     # --- convenience pass-throughs kept stable for the surfaces -------------
 
     def resolve_identity(
-        self, principal: Principal, project_id: str
+        self,
+        principal: Principal,
+        project_id: str,
+        allow_archived: bool = False,
     ) -> RequestIdentity:
-        return self.projects.resolve_identity(principal, project_id)
+        return self.projects.resolve_identity(
+            principal, project_id, allow_archived=allow_archived
+        )
 
     def current_revision(self, project_id: str) -> int:
         return self.projects.current_revision(project_id)

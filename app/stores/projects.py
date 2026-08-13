@@ -212,6 +212,64 @@ class ProjectStore:
                     )
                 )
 
+    # --- archiving ----------------------------------------------------------
+
+    def archive_project(self, project_id: str) -> None:
+        """Soft-delete a context: it leaves listings and can no longer be resolved.
+
+        Memory is retained — archiving is a projection, not a deletion. Any
+        client bindings are cleared so nobody is left pointed at a context their
+        tools can no longer reach.
+        """
+        with self.engine.begin() as conn:
+            conn.execute(
+                update(projects)
+                .where(projects.c.id == project_id)
+                .values(archived_at=utcnow(), updated_at=utcnow())
+            )
+        self.clear_bindings_for_project(project_id)
+
+    def unarchive_project(self, project_id: str) -> None:
+        with self.engine.begin() as conn:
+            conn.execute(
+                update(projects)
+                .where(projects.c.id == project_id)
+                .values(archived_at=None, updated_at=utcnow())
+            )
+
+    def list_archived_contexts(self, user_id: str) -> list[dict[str, Any]]:
+        """Archived contexts the user is a member of, so they can restore them."""
+        with self.engine.begin() as conn:
+            rows = conn.execute(
+                select(
+                    projects.c.id,
+                    projects.c.name,
+                    projects.c.slug,
+                    projects.c.context_revision,
+                    projects.c.archived_at,
+                    memberships.c.role,
+                )
+                .select_from(
+                    memberships.join(projects, memberships.c.project_id == projects.c.id)
+                )
+                .where(
+                    memberships.c.user_id == user_id,
+                    projects.c.archived_at.is_not(None),
+                )
+                .order_by(projects.c.archived_at.desc())
+            ).all()
+        return [
+            {
+                "id": r.id,
+                "name": r.name,
+                "slug": r.slug or "",
+                "revision": int(r.context_revision),
+                "role": r.role,
+                "archived_at": r.archived_at,
+            }
+            for r in rows
+        ]
+
     def remove_membership(self, project_id: str, user_id: str) -> None:
         from sqlalchemy import delete
 
@@ -532,7 +590,10 @@ class ProjectStore:
     # --- identity resolution (the membership gate) --------------------------
 
     def resolve_identity(
-        self, principal: Principal, project_id: str
+        self,
+        principal: Principal,
+        project_id: str,
+        allow_archived: bool = False,
     ) -> RequestIdentity:
         """Resolve a principal's role in a context, or refuse.
 
@@ -540,10 +601,20 @@ class ProjectStore:
         without revealing whether the context exists (project isolation). Also
         loads the context's display name/slug in the same query so every
         response can state which context it is operating in.
+
+        Archived contexts are refused unless ``allow_archived`` is set, which
+        only the console's restore path does. Without this an archived context
+        would still be writable through /v1 by its raw id, since that path does
+        not go through resolve_context_ref.
         """
         with self.engine.begin() as conn:
             row = conn.execute(
-                select(memberships.c.role, projects.c.name, projects.c.slug)
+                select(
+                    memberships.c.role,
+                    projects.c.name,
+                    projects.c.slug,
+                    projects.c.archived_at,
+                )
                 .select_from(
                     memberships.join(projects, memberships.c.project_id == projects.c.id)
                 )
@@ -554,6 +625,8 @@ class ProjectStore:
             ).first()
         if row is None:
             raise ForbiddenError("not a member of this context")
+        if row.archived_at is not None and not allow_archived:
+            raise ForbiddenError("this context is archived")
         return RequestIdentity(
             user_id=principal.user_id,
             agent_connection_id=principal.agent_connection_id,

@@ -36,6 +36,31 @@ guessing.
 **Sharing is never an agent tool.** Only a human can grant access, from the
 website.
 
+## Seeing what an agent was actually shown
+
+`/console/c/{id}/snapshots` lists one row per sync: the task, the revision, how
+many memories were included, how many were withheld and why, and the token
+estimate against the requested budget. Opening a row shows the full manifest —
+which memories went into that answer, and what was kept out.
+
+This answers "what exactly did Claude know when it said that?" and doubles as the
+privacy receipt: it reports the *count* of other members' private memories that
+were withheld, without naming them.
+
+Records are **private to the person whose agent made the call** — a snapshot
+enumerates that person's private memories, so not even a context owner can read
+someone else's.
+
+## Archiving a context
+
+An owner can archive a context from its console page. It disappears from every
+listing, can no longer be resolved by name or id, and any client bindings
+pointing at it are cleared, so agents stop seeing it immediately.
+
+Memory is retained — archiving is a projection, not a deletion. Restore it from
+the **Archived** section on `/console` and everything comes back at the same
+revision.
+
 ## Sharing a context
 
 `/console/c/{id}` → **Share this context** → email + access level:
@@ -66,8 +91,9 @@ One FastAPI process exposing:
 /auth/consent                OAuth approval for a connecting client
 /auth/connections            Connected clients + revoke
 /invite/{code}               Accept a shared context
-/console                     Your contexts, create, connected clients
-/console/c/{id}              One context: memories, members, sharing, audit
+/console                     Your contexts, create, archived, connected clients
+/console/c/{id}              One context: memories, members, sharing, audit, archive
+/console/c/{id}/snapshots    What your agents were actually shown (per sync)
 /health                      Liveness (+ user count)
 /openapi.json                REST schema (servers block from SAC_PUBLIC_URL)
 ```

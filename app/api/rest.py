@@ -11,6 +11,7 @@ from typing import Any
 
 from fastapi import APIRouter, Request
 
+from ..errors import ForbiddenError
 from ..identity import Principal, RequestIdentity
 from ..runtime import get_store
 from . import impl, sharing
@@ -245,6 +246,49 @@ def recent_changes(
 def get_source(project_id: str, source_id: str, request: Request) -> dict[str, Any]:
     identity = _identity(request, project_id)
     return impl.get_source(get_store(), identity, source_id)
+
+
+@router.post("/contexts/{context_id}/archive", operation_id="archive_context")
+def archive_context(context_id: str, request: Request) -> dict[str, Any]:
+    """Soft-delete a context. Owner only; memory is retained."""
+    store = get_store()
+    identity = _identity(request, context_id)
+    if identity.role != "owner":
+        raise ForbiddenError("only the owner can archive a context")
+    store.projects.archive_project(context_id)
+    store.audit.emit(
+        "context.archive", "project", context_id, project_id=context_id,
+        actor_user_id=identity.user_id,
+    )
+    return {"ok": True, "archived": True, "context": identity.context_name}
+
+
+@router.post("/contexts/{context_id}/unarchive", operation_id="unarchive_context")
+def unarchive_context(context_id: str, request: Request) -> dict[str, Any]:
+    """Restore an archived context."""
+    store = get_store()
+    identity = store.resolve_identity(
+        _principal(request), context_id, allow_archived=True
+    )
+    if identity.role != "owner":
+        raise ForbiddenError("only the owner can restore a context")
+    store.projects.unarchive_project(context_id)
+    store.audit.emit(
+        "context.unarchive", "project", context_id, project_id=context_id,
+        actor_user_id=identity.user_id,
+    )
+    return {"ok": True, "archived": False, "context": identity.context_name}
+
+
+@router.get("/contexts/{context_id}/snapshots", operation_id="list_snapshots")
+def list_snapshots(context_id: str, request: Request, limit: int = 25) -> dict[str, Any]:
+    """Your own compile records for this context — what your agents were shown."""
+    store = get_store()
+    identity = _identity(request, context_id)
+    snaps = store.snapshots.list_for_user(context_id, identity.user_id, limit=limit)
+    for s in snaps:
+        s["created_at"] = s["created_at"].isoformat() if s["created_at"] else None
+    return {"ok": True, "snapshots": snaps}
 
 
 @router.get("/projects/{project_id}/snapshots/{snapshot_id}", operation_id="get_snapshot")

@@ -54,6 +54,47 @@ class SnapshotStore:
             )
         return snapshot_id
 
+    def list_for_user(
+        self, project_id: str, user_id: str, limit: int = 25
+    ) -> list[dict[str, Any]]:
+        """A user's own compile records for a context, newest first.
+
+        Deliberately scoped to the caller: a snapshot enumerates exactly which
+        memories were fed to that person's agent, including their private ones,
+        so it is not another member's business — not even an admin's.
+        """
+        with self.engine.begin() as conn:
+            rows = conn.execute(
+                select(context_snapshots)
+                .where(
+                    context_snapshots.c.project_id == project_id,
+                    context_snapshots.c.user_id == user_id,
+                )
+                .order_by(context_snapshots.c.created_at.desc())
+                .limit(max(1, min(int(limit), 200)))
+            ).all()
+        out = []
+        for r in rows:
+            m = dict(r._mapping)
+            included = m.get("included") or []
+            excluded = m.get("excluded") or []
+            out.append({
+                "id": m["id"],
+                "task": m["task"],
+                "project_revision": m["project_revision"],
+                "budget_tokens": m["budget_tokens"],
+                "token_estimate": m["token_estimate"],
+                "included_count": len(included),
+                "excluded_count": len(excluded),
+                "withheld_private": sum(
+                    e.get("count", 0) for e in excluded
+                    if e.get("reason") == "not_visible_private_other"
+                ),
+                "created_at": m["created_at"],
+                "compiler_policy": m["compiler_policy"],
+            })
+        return out
+
     def get(self, snapshot_id: str) -> dict[str, Any] | None:
         with self.engine.begin() as conn:
             row = conn.execute(
