@@ -44,31 +44,91 @@ def _too_many(target: str) -> RedirectResponse:
     )
 
 
+# These pages are the product's front door — sign-in, and the OAuth consent
+# screen every Claude and ChatGPT user sees when connecting. They were plain
+# light-mode HTML while the app itself is dark Osmos, so the most-seen page in
+# the product looked like a different product.
+#
+# Same tokens as web/src/ui.css, deliberately duplicated rather than shared: the
+# app's CSS is a Vite build artefact, and having a server-rendered page depend on
+# it would mean the login screen could break because a front-end build did.
 _STYLE = """
-body{font-family:system-ui,sans-serif;margin:3rem auto;padding:0 1rem;color:#111}
-h1{font-size:1.25rem} h2{font-size:1rem;margin-top:1.75rem}
-.card{border:1px solid #ddd;border-radius:12px;padding:1.25rem}
-input,select{width:100%;padding:.55rem;margin:.35rem 0 .8rem;border:1px solid #ccc;
-  border-radius:8px;box-sizing:border-box;font:inherit}
-button{padding:.55rem 1rem;border:0;border-radius:8px;background:#111;color:#fff;cursor:pointer;font:inherit}
-button.secondary{background:#eee;color:#111}
-ul{padding-left:1.1rem} .muted{color:#666;font-size:.9rem}
+:root{
+  --ink-950:#0b111b; --ink-900:#111827; --ink-800:#162033; --ink-700:#1e2a40;
+  --mineral:#f7faff; --mist:#a9b3c5; --mist-dim:#7c8798; --line:#22304a;
+  --blue:#3e8cff; --danger:#ff6b6b;
+  --flow:linear-gradient(90deg,#b02eff 0%,#8a4dff 25%,#6666ff 50%,#3e8cff 75%,#30c4f4 100%);
+}
+*{box-sizing:border-box}
+body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  margin:0;padding:6vh 1rem 4rem;color:var(--mineral);background:var(--ink-950);
+  line-height:1.55;-webkit-font-smoothing:antialiased}
+.wrap{margin:0 auto}
+.brand{display:flex;align-items:center;gap:.6rem;justify-content:center;
+  margin-bottom:1.5rem;font-weight:600;letter-spacing:-.01em;font-size:1.05rem}
+.brand .bar{width:38px;height:3px;border-radius:2px;background:var(--flow)}
+h1{font-size:1.3rem;font-weight:600;letter-spacing:-.01em;margin:0 0 .35rem}
+h2{font-size:1rem;font-weight:600;margin:1.75rem 0 .5rem}
+.card{background:var(--ink-900);border:1px solid var(--line);border-radius:18px;
+  padding:1.6rem}
+label{display:block;font-size:.8125rem;font-weight:500;color:var(--mist);
+  margin:.9rem 0 .35rem}
+input,select{width:100%;padding:.6rem .75rem;border:1px solid var(--line);
+  border-radius:8px;background:var(--ink-950);color:var(--mineral);font:inherit;
+  font-size:.9375rem}
+input:focus,select:focus{outline:none;border-color:var(--blue)}
+input::placeholder{color:var(--mist-dim)}
+button{padding:.6rem 1rem;border:0;border-radius:8px;background:var(--mineral);
+  color:var(--ink-950);cursor:pointer;font:inherit;font-weight:600;
+  font-size:.9375rem;margin-top:1.1rem}
+button:hover{background:#e6edfa}
+button.secondary{background:var(--ink-800);color:var(--mineral);
+  border:1px solid var(--line);font-weight:500}
+button.secondary:hover{background:var(--ink-700)}
+button.wide{width:100%}
+ul{padding-left:1.1rem;color:var(--mist)}
+.muted{color:var(--mist);font-size:.875rem}
 form.inline{display:inline}
-table{width:100%;border-collapse:collapse;margin:.5rem 0 1rem}
-th,td{text-align:left;padding:.4rem .5rem;border-bottom:1px solid #eee;vertical-align:top}
-th{font-size:.8rem;text-transform:uppercase;letter-spacing:.03em;color:#666}
-code{background:#f3f3f3;padding:.1rem .3rem;border-radius:4px}
-.notice{background:#fff8e1;border:1px solid #f0e0a0;padding:.6rem .8rem;border-radius:8px}
-a{color:#0b57d0}
+form.inline button{margin-right:.4rem}
+table{width:100%;border-collapse:collapse;margin:.5rem 0 1rem;font-size:.875rem}
+th,td{text-align:left;padding:.5rem .6rem .5rem 0;border-bottom:1px solid var(--line);
+  vertical-align:top}
+th{font-size:.75rem;text-transform:uppercase;letter-spacing:.04em;
+  color:var(--mist-dim);font-weight:500}
+code{background:var(--ink-800);padding:.12rem .35rem;border-radius:4px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.85em}
+.notice{background:var(--ink-950);border:1px solid var(--line);
+  border-left:2px solid var(--blue);padding:.7rem .9rem;border-radius:8px;
+  color:var(--mist);font-size:.875rem;margin:.9rem 0}
+a{color:var(--blue);text-decoration:none}
+a:hover{text-decoration:underline}
 """
+
+# The Osmos mark: a persistent axis crossed by converging streams. Inline so the
+# page needs no network request and renders before anything else loads.
+_MARK = (
+    '<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">'
+    '<defs><linearGradient id="f" x1="0" y1="0" x2="1" y2="0">'
+    '<stop offset="0%" stop-color="#B02EFF"/><stop offset="50%" stop-color="#6666FF"/>'
+    '<stop offset="100%" stop-color="#30C4F4"/></linearGradient></defs>'
+    '<g stroke="url(#f)" stroke-width="1.8" stroke-linecap="round" fill="none">'
+    '<path d="M5 5.5V18.5"/><path d="M9 4.5V19.5"/><path d="M13 5.5V18.5"/>'
+    '<path d="M17 4.5V19.5"/><path d="M21 6V18"/></g>'
+    '<path d="M2 12H22" stroke="#F7FAFF" stroke-width="1.8" stroke-linecap="round"/>'
+    "</svg>"
+)
 
 
 def _shell(title: str, body: str, max_width: str) -> str:
-    return f"""<!doctype html><html><head><meta charset="utf-8">
+    return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{html.escape(title)}</title>
-<style>{_STYLE}body{{max-width:{max_width}}}</style>
-</head><body><div class="card">{body}</div></body></html>"""
+<meta name="color-scheme" content="dark">
+<title>{html.escape(title)} · Osmos</title>
+<style>{_STYLE}.wrap{{max-width:{max_width}}}</style>
+</head><body><div class="wrap">
+<div class="brand">{_MARK}<span>Osmos</span></div>
+<div class="card">{body}</div>
+</div></body></html>"""
 
 
 def _page(title: str, body: str) -> str:
@@ -494,23 +554,44 @@ def consent_form(request: Request, txn: str = ""):
     from urllib.parse import urlparse
 
     redirect_host = urlparse(tx["redirect_uri"]).hostname or "the client"
+    # Name the account being connected. Someone with two Osmos accounts needs to
+    # see which one they are about to hand to the client.
+    account = store.projects.get_user(user_id) or {}
+    email = account.get("email", "your account")
+
     scopes = tx["scopes"] or ["sac.read", "sac.write"]
+    # Say what the scope *means*, not what it is called. "sac.write" tells
+    # someone nothing about what they are agreeing to.
+    meanings = {
+        "sac.read": "Read the shared memory in contexts you belong to",
+        "sac.write": "Publish new memory to those contexts on your behalf",
+    }
     scope_items = "".join(
-        f"<li>{html.escape(s)}</li>" for s in scopes
+        f"<li>{html.escape(meanings.get(s, s))}</li>" for s in scopes
     )
-    body = f"""<h1>Authorize connection</h1>
-<p><b>{html.escape(client_name)}</b> ({html.escape(redirect_host)}) wants to access
-Shared Agent Context on your behalf.</p>
-<p class="muted">Requested access:</p><ul>{scope_items}</ul>
+    body = f"""<h1>Connect {html.escape(client_name)}</h1>
+<p class="muted" style="margin-top:0">
+{html.escape(client_name)} at <code>{html.escape(redirect_host)}</code> is asking
+to use Osmos as <b>{html.escape(email)}</b>.</p>
+
+<h2 style="margin-top:1.4rem">It will be able to</h2>
+<ul>{scope_items}</ul>
+
+<div class="notice">
+It can only reach contexts you are already a member of, and it can never share
+one with anyone — only you can do that, from this website. You can disconnect it
+at any time under Connected clients.
+</div>
+
 <form class="inline" method="post" action="/auth/consent">
 <input type="hidden" name="txn" value="{html.escape(txn)}">
 <input type="hidden" name="decision" value="approve">
-<button type="submit">Allow</button></form>
+<button type="submit">Connect</button></form>
 <form class="inline" method="post" action="/auth/consent">
 <input type="hidden" name="txn" value="{html.escape(txn)}">
 <input type="hidden" name="decision" value="deny">
-<button class="secondary" type="submit">Deny</button></form>"""
-    return HTMLResponse(_page("Authorize", body))
+<button class="secondary" type="submit">Cancel</button></form>"""
+    return HTMLResponse(_page("Connect a client", body))
 
 
 @router.post("/auth/consent")
