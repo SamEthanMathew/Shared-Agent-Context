@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import { api } from '../api.js'
+import BillingPanel from '../BillingPanel.jsx'
 import { Dialog, Loading } from '../components.jsx'
 import { Link } from '../router.jsx'
 
@@ -250,6 +251,8 @@ function OrgDetail({ orgId, navigate, toast, onChanged }) {
           ))}
         </div>
       </div>
+
+      <BillingPanel orgId={orgId} toast={toast} />
 
       <div className="card">
         <div className="card-head">

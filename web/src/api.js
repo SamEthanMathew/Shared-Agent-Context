@@ -110,6 +110,12 @@ export const api = {
   setContextOrgAccess: (contextId, access) =>
     request('PUT', `/v1/contexts/${contextId}/org-access`, { access }),
 
+  billing: (orgId) => request('GET', `/v1/orgs/${orgId}/billing`),
+  startCheckout: (orgId, interval) =>
+    request('POST', `/v1/orgs/${orgId}/billing/checkout?interval=${interval}`),
+  billingPortal: (orgId) => request('POST', `/v1/orgs/${orgId}/billing/portal`),
+  cancelSubscription: (orgId) => request('POST', `/v1/orgs/${orgId}/billing/cancel`),
+
   connections: () => request('GET', '/v1/connections'),
   revokeConnection: (connId) =>
     request('POST', `/v1/connections/${connId}/revoke`),

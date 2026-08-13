@@ -245,7 +245,15 @@ reaches a model.
 | `SAC_DB_POOL_SIZE` / `SAC_DB_MAX_OVERFLOW` | Connections per process (default 10 + 10). `app/main.py` caps the worker-thread pool to the same total, so the process never accepts more concurrency than the database can serve. Their sum × instances, plus the reaper, must stay under the Postgres plan's `max_connections`. |
 | `SAC_RETENTION_DAYS_SNAPSHOTS` | How long sync records are kept (default 90). See *How long data is kept*. |
 | `SAC_COMPILE_CANDIDATE_LIMIT` | Live memories one sync may rank (default 750). Past this a sync considers the most recent slice and reports `candidates_truncated`. |
-| `SAC_MAX_CONTEXTS_PER_USER` etc. | Quota overrides — see `app/limits.py`. |
+| `SAC_MAX_CONTEXTS_PER_USER` etc. | Multi-tenant safety caps — see `app/limits.py`. Distinct from plan limits below. |
+| `STRIPE_SECRET_KEY` | Enables billing. Unset → everything runs on Free and the product is otherwise complete. `sk_test_…` puts the UI in test mode. |
+| `STRIPE_WEBHOOK_SECRET` | Required. The webhook fails closed without it, since it is the only route that grants a paid plan. |
+| `STRIPE_PRO_MONTHLY_PRICE_ID` / `STRIPE_PRO_ANNUAL_PRICE_ID` | The two per-seat prices ($8/month, $84/year). |
+| `STRIPE_FOUNDING_COUPON_ID` | Optional 25%-for-12-months coupon, applied at checkout. |
+| `STRIPE_PORTAL_CONFIGURATION_ID` | Optional. Use a portal configuration with seat-quantity editing **off**. |
+| `STRIPE_TAX_ENABLED` | Off by default. Turn on only where the company is actually registered. |
+| `SAC_FREE_MAX_CONTEXTS` / `_MEMBERS` / `_AGENTS` / `_MEMORIES` / `_SYNCS` | Free-plan limits (1 / 3 / 3 / 1000 / 500). `0` means unlimited. Overridable because these are a pricing hypothesis, not a fact. |
+| `SAC_BILLING_GRACE_DAYS` | How long service continues after a failed payment (default 14). |
 
 ### Sign-in with Google or GitHub
 
@@ -396,3 +404,50 @@ succeeds.
   blueprint uses paid plans by default to avoid both.
 - V1 stores a `sensitivity` label and refuses `secret` at write time, but does
   not yet enforce per-grant sensitivity ceilings (privacy Phase 2).
+
+## Billing
+
+Free is a pure application entitlement — no Stripe object exists for it — so the
+product runs complete on a deployment that has never heard of Stripe. Pro is a
+per-seat subscription on the **organisation**, which is the billing workspace:
+one organisation, one Stripe customer, one subscription whose quantity is its
+member count.
+
+| Plan | Price | Allows |
+|---|---|---|
+| **Free** | $0 | 1 context, 3 members, 3 connected agents, 500 syncs/month |
+| **Pro** | $8/user/month or $84/user/year | Unlimited contexts, members, agents |
+| **Enterprise** | custom | Handled manually |
+
+Personal (org-less) use is Free. Going Pro means creating an organisation, which
+is also what makes seats and shared access meaningful.
+
+**Seats are computed by Osmos and pushed to Stripe, never the reverse.** Adding a
+member raises the quantity and prorates immediately — they have the seat now.
+Removing one ends their access at once but lets the quantity fall at renewal, as
+that seat is already paid for. Nothing in the Stripe portal lets a customer edit
+the quantity; if it could, a workspace could pay for three seats while ten people
+used it.
+
+**Nothing is ever deleted for a billing reason.** Cancelling keeps Pro until the
+paid period ends, then returns the workspace to Free limits with every context
+and memory intact — a workspace over the Free limits keeps what it has and simply
+cannot add more. A failed payment starts a 14-day grace period rather than
+cutting service, because an expired card is not a decision to leave.
+
+### One-time Stripe setup
+
+```bash
+# Creates "Osmos Pro" and its two seat prices, idempotently.
+STRIPE_SECRET_KEY=sk_test_... python -m app.billing.setup
+```
+
+Point a webhook at `https://<host>/api/webhooks/stripe` for
+`checkout.session.completed`, `invoice.paid`, `invoice.payment_failed`,
+`customer.subscription.updated`, and `customer.subscription.deleted`, then set
+`STRIPE_WEBHOOK_SECRET`. The endpoint verifies every signature and **fails closed**
+without that secret — it is the only route that grants a paid plan.
+
+Usage and cost counters (syncs, writes, retrievals, tokens, storage) are recorded
+per workspace but never billed. Metered pricing is deliberately not implemented:
+the point of measuring first is to decide it from data rather than from a guess.
