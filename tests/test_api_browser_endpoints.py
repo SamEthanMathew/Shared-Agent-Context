@@ -135,6 +135,61 @@ def test_activity_still_fills_a_page_when_noise_is_filtered(api):
     assert all(e["action"] == "memory.create" for e in events)
 
 
+# --- sync records are private to their own agent's owner --------------------
+
+
+def _snapshot_for(seed, identity, user_id, ref="chat-x", task="what do we know"):
+    from app.context import compile_context
+
+    session = seed.store.sessions.get_or_create(seed.project_id, user_id, ref)
+    compile_context(seed.store, identity, session, task)
+    return seed.store.snapshots.list_for_user(seed.project_id, user_id)[0]["id"]
+
+
+def test_an_owner_cannot_read_another_members_sync_record(api):
+    """A snapshot enumerates that person's private memory.
+
+    docs/SETUP.md promises "not even a context owner can read someone else's",
+    and the console enforced it — but this endpoint used to admit owners and
+    admins, which quietly contradicted both.
+    """
+    c, seed, _ = api  # signed in as alice, the owner
+    bob_snapshot = _snapshot_for(seed, seed.bob, seed.bob_user_id, "chat-bob")
+    r = c.get(f"/v1/projects/{seed.project_id}/snapshots/{bob_snapshot}")
+    assert r.status_code == 403
+
+
+def test_you_can_read_your_own_sync_record(api):
+    c, seed, _ = api
+    seed.store.memories.remember(
+        seed.alice, scope="shared", kind="decision", summary="Recorded decision."
+    )
+    mine = _snapshot_for(seed, seed.alice, seed.alice_user_id, "chat-alice")
+    r = c.get(f"/v1/projects/{seed.project_id}/snapshots/{mine}")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["snapshot"]["task"] == "what do we know"
+    # The manifest names memories, not bare ids.
+    summaries = [x.get("summary") for x in body["included"]]
+    assert "Recorded decision." in summaries
+
+
+def test_the_manifest_reports_withheld_private_memory_without_naming_it(api):
+    """The privacy receipt: a count, never whose or what."""
+    c, seed, _ = api
+    seed.store.memories.remember(
+        seed.bob, scope="private", kind="note", summary="Bob's secret note."
+    )
+    mine = _snapshot_for(seed, seed.alice, seed.alice_user_id, "chat-alice")
+    body = c.get(f"/v1/projects/{seed.project_id}/snapshots/{mine}").json()
+
+    aggregates = [x for x in body["withheld"] if x["aggregate"]]
+    assert aggregates and aggregates[0]["count"] == 1
+    blob = str(body)
+    assert "Bob's secret note." not in blob
+    assert seed.bob_user_id not in blob
+
+
 # --- connected AI clients ---------------------------------------------------
 
 

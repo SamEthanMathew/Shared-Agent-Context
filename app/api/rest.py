@@ -486,15 +486,58 @@ def list_snapshots(context_id: str, request: Request, limit: int = 25) -> dict[s
 
 @router.get("/projects/{project_id}/snapshots/{snapshot_id}", operation_id="get_snapshot")
 def get_snapshot(project_id: str, snapshot_id: str, request: Request) -> dict[str, Any]:
+    """One sync record: what was compiled into an agent's context, and what wasn't.
+
+    Readable **only** by the person whose agent made the call. A snapshot
+    enumerates the memories fed to that agent, which includes their private
+    ones, so a context owner has no more business reading it than anyone else —
+    the same rule the console has always enforced, and what docs/SETUP.md
+    promises. This endpoint previously admitted owners and admins.
+    """
     store = get_store()
     identity = _identity(request, project_id)
     snap = store.snapshots.get(snapshot_id)
-    from ..errors import ForbiddenError, NotFoundError
 
     if snap is None or snap["project_id"] != project_id:
         raise NotFoundError("snapshot not found")
-    if snap["user_id"] != identity.user_id and identity.role not in ("owner", "admin"):
+    if snap["user_id"] != identity.user_id:
         raise ForbiddenError("not permitted")
+
     snap = dict(snap)
     snap["created_at"] = snap["created_at"].isoformat()
-    return {"ok": True, "snapshot": snap}
+
+    # Resolve memory ids to summaries so the manifest is readable. get_memory
+    # carries the visibility predicate, so anything no longer visible to this
+    # caller comes back as None and is reported as such rather than guessed at.
+    def describe(
+        entries: list[dict[str, Any]] | None, detail_key: str
+    ) -> list[dict[str, Any]]:
+        out = []
+        for entry in entries or []:
+            memory_id = entry.get("memory_id")
+            if not memory_id:
+                # An aggregate row, e.g. "3 private memories withheld". It names
+                # nobody by design.
+                out.append({
+                    "aggregate": True,
+                    "count": entry.get("count"),
+                    "detail": entry.get("reason", "withheld"),
+                })
+                continue
+            memory = store.memories.get_memory(project_id, memory_id, identity.user_id)
+            out.append({
+                "aggregate": False,
+                "memory_id": memory_id,
+                "kind": memory.kind if memory else None,
+                "summary": memory.summary if memory else None,
+                "visible": memory is not None,
+                "detail": entry.get(detail_key),
+            })
+        return out
+
+    return {
+        "ok": True,
+        "snapshot": snap,
+        "included": describe(snap.get("included"), "section"),
+        "withheld": describe(snap.get("excluded"), "reason"),
+    }

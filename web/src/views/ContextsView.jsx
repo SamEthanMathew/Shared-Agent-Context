@@ -1,5 +1,5 @@
 /* The home screen: every context available to you. */
-import { accessLabel, when } from '../components.jsx'
+import { accessLabel } from '../components.jsx'
 import { Link } from '../router.jsx'
 
 export default function ContextsView({ me, navigate, onCreate }) {
@@ -55,8 +55,12 @@ export default function ContextsView({ me, navigate, onCreate }) {
               <span className="mono">r{c.revision}</span>
               {' · '}
               {c.member_count} {c.member_count === 1 ? 'member' : 'members'}
-              {c.last_active_at ? ` · active ${when(c.last_active_at)}` : ''}
             </div>
+            {c.description ? (
+              <div className="tiny" style={{ marginTop: 6 }}>
+                {c.description}
+              </div>
+            ) : null}
           </Link>
         ))}
       </div>

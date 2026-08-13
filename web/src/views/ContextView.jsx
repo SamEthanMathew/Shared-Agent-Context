@@ -401,7 +401,7 @@ function SentTab({ context }) {
                     style={{ cursor: 'pointer' }}
                   >
                     <td>{s.task || <span className="tiny">—</span>}</td>
-                    <td className="mono">r{s.revision}</td>
+                    <td className="mono">r{s.project_revision}</td>
                     <td>{s.included_count}</td>
                     <td>
                       {s.withheld_private ? (
@@ -440,26 +440,71 @@ function SnapshotDialog({ contextId, snapshot, onClose }) {
   useEffect(() => {
     api
       .snapshot(contextId, snapshot.id)
-      .then((out) => setDetail(out.snapshot))
+      .then(setDetail)
       .catch((e) => setError(e.message))
   }, [contextId, snapshot.id])
 
   return (
-    <Dialog title={snapshot.task || 'Sync'} onClose={onClose}>
+    <Dialog title={snapshot.task || 'Sync record'} onClose={onClose}>
       {error ? <div className="notice error">{error}</div> : null}
       {!detail && !error ? <Loading label="Loading manifest" /> : null}
       {detail ? (
-        <pre
-          style={{
-            whiteSpace: 'pre-wrap',
-            fontSize: '0.8125rem',
-            color: 'var(--mist)',
-            margin: 0,
-          }}
-        >
-          {JSON.stringify(detail.manifest ?? detail, null, 2)}
-        </pre>
+        <>
+          <p className="tiny" style={{ marginTop: 0 }}>
+            <span className="mono">r{detail.snapshot.project_revision}</span>
+            {` · ~${detail.snapshot.token_estimate} of `}
+            {detail.snapshot.budget_tokens} tokens ·{' '}
+            {when(detail.snapshot.created_at)}
+          </p>
+
+          <h3 style={{ marginBottom: 8 }}>
+            Included ({detail.included.length})
+          </h3>
+          <ManifestList entries={detail.included} emptyLabel="Nothing included" />
+
+          <h3 style={{ margin: '20px 0 8px' }}>
+            Withheld ({detail.withheld.length})
+          </h3>
+          <ManifestList entries={detail.withheld} emptyLabel="Nothing withheld" />
+        </>
       ) : null}
     </Dialog>
+  )
+}
+
+function ManifestList({ entries, emptyLabel }) {
+  if (!entries.length) return <p className="tiny">{emptyLabel}</p>
+  return (
+    <div className="list">
+      {entries.map((entry, i) => (
+        <div
+          className="item"
+          key={entry.memory_id || `agg-${i}`}
+          style={{ padding: '10px 0' }}
+        >
+          {entry.aggregate ? (
+            // Deliberately unnamed: other people's private memory is reported as
+            // a count and nothing more.
+            <div className="sub">
+              {entry.count} × {entry.detail.replace(/_/g, ' ')}
+            </div>
+          ) : (
+            <>
+              <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+                {entry.kind ? <span className="badge">{entry.kind}</span> : null}
+                <span className="grow">
+                  {entry.summary || (
+                    <span className="tiny">(no longer visible to you)</span>
+                  )}
+                </span>
+                {entry.detail ? (
+                  <span className="tiny">{entry.detail}</span>
+                ) : null}
+              </div>
+            </>
+          )}
+        </div>
+      ))}
+    </div>
   )
 }
