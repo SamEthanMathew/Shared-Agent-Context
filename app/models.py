@@ -84,6 +84,10 @@ ACCESS_TO_ROLE: dict[str, str] = {
     "edit": "member",
     "manage": "admin",
 }
+# What "anyone with the link" may be set to. `manage` is absent on purpose: a
+# link that grants the right to re-share would propagate access no human chose.
+LINK_ACCESS_LEVELS: tuple[str, ...] = ("none", "view", "edit")
+LinkAccess = Literal["none", "view", "edit"]
 ROLE_TO_ACCESS: dict[str, str] = {
     "viewer": "view",
     "member": "edit",
@@ -231,3 +235,5 @@ class ProjectRecord:
     created_at: datetime | None = None
     updated_at: datetime | None = None
     archived_at: datetime | None = None
+    link_access: str = "none"
+    link_token: str | None = None

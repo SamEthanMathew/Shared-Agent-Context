@@ -21,6 +21,7 @@ from .schemas import (
     AddMemberRequest,
     CreateProjectRequest,
     CreateSessionRequest,
+    LinkAccessRequest,
     RememberRequest,
     ShareRequest,
     SyncRequest,
@@ -150,9 +151,44 @@ def list_members(project_id: str, request: Request) -> dict[str, Any]:
 # --- sharing (human-only; deliberately not exposed as MCP tools) ------------
 
 
+def _base_url() -> str:
+    import os
+
+    return os.getenv("SAC_PUBLIC_URL") or os.getenv("RENDER_EXTERNAL_URL") or ""
+
+
 @router.get("/contexts/{context_id}/shares", operation_id="list_shares")
 def list_shares(context_id: str, request: Request) -> dict[str, Any]:
-    return sharing.list_shares(get_store(), _identity(request, context_id))
+    return sharing.list_shares(
+        get_store(), _identity(request, context_id), base_url=_base_url()
+    )
+
+
+@router.get("/contexts/{context_id}/link", operation_id="get_context_link")
+def get_context_link(context_id: str, request: Request) -> dict[str, Any]:
+    """The share-link state. The token itself is only returned to a sharer."""
+    return sharing.get_link(
+        get_store(), _identity(request, context_id), base_url=_base_url()
+    )
+
+
+@router.put("/contexts/{context_id}/link", operation_id="set_context_link")
+def set_context_link(
+    context_id: str, payload: LinkAccessRequest, request: Request
+) -> dict[str, Any]:
+    """Open or close "anyone with the link" access. Owners and managers only."""
+    return sharing.set_link_access(
+        get_store(), _identity(request, context_id), payload.access,
+        base_url=_base_url(),
+    )
+
+
+@router.post("/contexts/{context_id}/link/rotate", operation_id="rotate_context_link")
+def rotate_context_link(context_id: str, request: Request) -> dict[str, Any]:
+    """Replace the link, invalidating every copy already circulating."""
+    return sharing.rotate_link(
+        get_store(), _identity(request, context_id), base_url=_base_url()
+    )
 
 
 @router.post("/contexts/{context_id}/shares", operation_id="share_context")

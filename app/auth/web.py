@@ -488,6 +488,69 @@ def invite_accept(code: str, request: Request):
     return RedirectResponse(f"/console/c/{result['project_id']}?joined=1", status_code=303)
 
 
+# --- joining by share link --------------------------------------------------
+
+
+@router.get("/c/{token}", response_class=HTMLResponse)
+def link_landing(token: str, request: Request):
+    """The URL people paste into a group chat.
+
+    Deliberately shows the context name and access level before asking anyone to
+    sign in: a person deciding whether to join should know what they are joining.
+    Nothing about the context's *contents* is revealed.
+    """
+    store = get_store()
+    project = store.projects.get_by_link_token(token)
+    if project is None:
+        return HTMLResponse(
+            _page("Link", "<h1>This link is invalid or no longer active</h1>"
+                  '<p class="muted">Ask whoever shared it for a new one.</p>'),
+            status_code=404,
+        )
+    access = project.link_access
+    verb = "view" if access == "view" else "view and edit"
+    uid = _current_user(request)
+    if uid:
+        role = store.projects.get_role(project.id, uid)
+        if role:
+            return RedirectResponse(f"/console/c/{project.id}", status_code=303)
+        body = f"""<h1>Join '{html.escape(project.name)}'</h1>
+<p>Anyone with this link can <b>{verb}</b> this shared context.</p>
+<form method="post" action="/c/{html.escape(token)}/join">
+<button type="submit">Join this context</button></form>"""
+        return HTMLResponse(_page("Join context", body))
+
+    nxt = f"/c/{token}"
+    body = f"""<h1>Join '{html.escape(project.name)}'</h1>
+<p>Anyone with this link can <b>{verb}</b> this shared context.</p>
+<p class="muted">Sign in or create an account to join.</p>
+<p><a href="/auth/signup?next={html.escape(nxt)}"><button type="button">Create account</button></a>
+<a href="/auth/login?next={html.escape(nxt)}"><button type="button" class="secondary">Sign in</button></a></p>"""
+    return HTMLResponse(_page("Join context", body))
+
+
+@router.post("/c/{token}/join")
+def link_join(token: str, request: Request):
+    from ..api.sharing import join_by_link
+    from ..errors import SACError
+
+    if not _rate_ok(request, "invite_accept"):
+        return HTMLResponse(
+            _page("Slow down", "<h1>Too many attempts</h1>"), status_code=429
+        )
+    uid = _current_user(request)
+    if not uid:
+        return RedirectResponse(f"/auth/login?next=/c/{token}", status_code=303)
+    try:
+        result = join_by_link(get_store(), token, uid)
+    except SACError as exc:
+        return HTMLResponse(
+            _page("Link", f"<h1>Could not join</h1><p>{html.escape(str(exc))}</p>"),
+            status_code=400,
+        )
+    return RedirectResponse(f"/console/c/{result['project_id']}?joined=1", status_code=303)
+
+
 @router.post("/auth/connections/{conn_id}/revoke")
 def revoke_connection(conn_id: str, request: Request):
     store = get_store()

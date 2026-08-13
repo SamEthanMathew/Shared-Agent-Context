@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from ..models import AccessLevel, MemoryKind, Scope, Sensitivity
+from ..models import AccessLevel, LinkAccess, MemoryKind, Scope, Sensitivity
 
 
 class CreateProjectRequest(BaseModel):
@@ -22,6 +22,12 @@ class ShareRequest(BaseModel):
 
 class AccessRequest(BaseModel):
     access: AccessLevel
+
+
+class LinkAccessRequest(BaseModel):
+    """`manage` is absent from LinkAccess by design — a link cannot re-share."""
+
+    access: LinkAccess
 
 
 class AddMemberRequest(BaseModel):

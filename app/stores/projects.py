@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import secrets
 import uuid
 from typing import Any
 
@@ -23,6 +24,11 @@ from ..models import ROLE_TO_ACCESS, ProjectRecord
 
 def _new_id() -> str:
     return str(uuid.uuid4())
+
+
+def _new_link_token() -> str:
+    """A share-link secret. 32 bytes so it cannot be enumerated or guessed."""
+    return secrets.token_urlsafe(32)
 
 
 def slugify(name: str) -> str:
@@ -166,12 +172,72 @@ class ProjectStore:
             created_at=m["created_at"],
             updated_at=m["updated_at"],
             archived_at=m["archived_at"],
+            link_access=m["link_access"] or "none",
+            link_token=m["link_token"],
         )
 
     def get_project(self, project_id: str) -> ProjectRecord | None:
         with self.engine.begin() as conn:
             row = conn.execute(
                 select(projects).where(projects.c.id == project_id)
+            ).first()
+        return self._to_record(row._mapping) if row else None
+
+    # --- "anyone with the link" sharing --------------------------------------
+
+    def set_link_access(self, project_id: str, access: str) -> str | None:
+        """Set the link level, minting a token the first time one is needed.
+
+        Closing a link keeps its token so reopening restores the same URL —
+        people paste these into group chats, and silently invalidating them on a
+        view/edit flip would be surprising. Rotation is the explicit way to
+        break old copies.
+        """
+        with self.engine.begin() as conn:
+            row = conn.execute(
+                select(projects.c.link_token).where(projects.c.id == project_id)
+            ).first()
+            if row is None:
+                raise NotFoundError("context not found")
+            token = row[0]
+            if token is None and access != "none":
+                token = _new_link_token()
+            conn.execute(
+                projects.update()
+                .where(projects.c.id == project_id)
+                .values(link_access=access, link_token=token, updated_at=utcnow())
+            )
+        return token
+
+    def rotate_link_token(self, project_id: str) -> str:
+        """Issue a fresh token, invalidating every link already handed out."""
+        token = _new_link_token()
+        with self.engine.begin() as conn:
+            result = conn.execute(
+                projects.update()
+                .where(projects.c.id == project_id)
+                .values(link_token=token, updated_at=utcnow())
+            )
+            if result.rowcount == 0:
+                raise NotFoundError("context not found")
+        return token
+
+    def get_by_link_token(self, token: str) -> ProjectRecord | None:
+        """Resolve an open link. Closed links and archived contexts return None.
+
+        Filtering on `link_access != 'none'` here rather than at the caller
+        means a closed link is indistinguishable from a wrong one, so the token
+        cannot be used to probe which contexts exist.
+        """
+        if not token:
+            return None
+        with self.engine.begin() as conn:
+            row = conn.execute(
+                select(projects).where(
+                    projects.c.link_token == token,
+                    projects.c.link_access != "none",
+                    projects.c.archived_at.is_(None),
+                )
             ).first()
         return self._to_record(row._mapping) if row else None
 

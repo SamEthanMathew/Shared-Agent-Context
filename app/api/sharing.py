@@ -19,7 +19,12 @@ from .. import email as mailer
 from ..errors import ConflictError, ForbiddenError, NotFoundError, ValidationError
 from ..identity import RequestIdentity
 from ..limits import MAX_MEMBERS_PER_CONTEXT, enforce_quota, require_verified
-from ..models import ACCESS_TO_ROLE, ROLE_TO_ACCESS, SHARER_ROLES
+from ..models import (
+    ACCESS_TO_ROLE,
+    LINK_ACCESS_LEVELS,
+    ROLE_TO_ACCESS,
+    SHARER_ROLES,
+)
 from ..stores import SACStore
 
 
@@ -192,8 +197,120 @@ def revoke_access(
     return {"ok": True, "user_id": user_id, "revoked": True}
 
 
-def list_shares(store: SACStore, identity: RequestIdentity) -> dict[str, Any]:
-    """Members and pending invites for a context."""
+# --- "anyone with the link" -------------------------------------------------
+
+
+def _link_payload(
+    project, may_share: bool, base_url: str = ""
+) -> dict[str, Any]:
+    """Describe the link, revealing the token only to someone who may share it.
+
+    Everyone in a context can see *that* it is link-shared — that is material to
+    deciding what to write in it. Only owners and managers get the token,
+    because holding the token is operationally the same as being able to share.
+    """
+    access = project.link_access or "none"
+    token = project.link_token if (may_share and access != "none") else None
+    url = f"{base_url.rstrip('/')}/c/{token}" if (token and base_url) else (
+        f"/c/{token}" if token else ""
+    )
+    return {"access": access, "token": token, "url": url}
+
+
+def get_link(
+    store: SACStore, identity: RequestIdentity, base_url: str = ""
+) -> dict[str, Any]:
+    project = store.projects.get_project(identity.project_id)
+    if project is None:
+        raise NotFoundError("context not found")
+    return _link_payload(project, identity.role in SHARER_ROLES, base_url)
+
+
+def set_link_access(
+    store: SACStore, identity: RequestIdentity, access: str, base_url: str = ""
+) -> dict[str, Any]:
+    """Open or close the context to anyone holding its link."""
+    _require_sharer(identity)
+    level = (access or "").strip().lower()
+    if level not in LINK_ACCESS_LEVELS:
+        raise ValidationError(
+            "link access must be one of: none, view, edit — a link cannot grant "
+            "manage, because that would let it share itself further"
+        )
+    store.projects.set_link_access(identity.project_id, level)
+    store.audit.emit(
+        "context.link_access", "project", identity.project_id,
+        project_id=identity.project_id, actor_user_id=identity.user_id,
+        meta={"access": level},
+    )
+    project = store.projects.get_project(identity.project_id)
+    return {"ok": True, **_link_payload(project, True, base_url)}
+
+
+def rotate_link(
+    store: SACStore, identity: RequestIdentity, base_url: str = ""
+) -> dict[str, Any]:
+    """Replace the link, breaking every copy already circulating."""
+    _require_sharer(identity)
+    store.projects.rotate_link_token(identity.project_id)
+    store.audit.emit(
+        "context.link_rotate", "project", identity.project_id,
+        project_id=identity.project_id, actor_user_id=identity.user_id,
+    )
+    project = store.projects.get_project(identity.project_id)
+    return {"ok": True, **_link_payload(project, True, base_url)}
+
+
+def join_by_link(store: SACStore, token: str, user_id: str) -> dict[str, Any]:
+    """Redeem a share link.
+
+    A closed link, a rotated-away token, an archived context, and a token that
+    never existed all raise the same NotFoundError, so the endpoint cannot be
+    used to discover which contexts exist.
+    """
+    project = store.projects.get_by_link_token((token or "").strip())
+    if project is None:
+        raise NotFoundError("this link is invalid or no longer active")
+
+    require_verified(store, user_id, "join a shared context")
+    existing_role = store.projects.get_role(project.id, user_id)
+    if existing_role is not None:
+        # Already in. Never re-grant: a view link must not demote an editor, and
+        # must certainly not demote the owner.
+        return {
+            "ok": True,
+            "project_id": project.id,
+            "context_name": project.name,
+            "access": ROLE_TO_ACCESS.get(existing_role, existing_role),
+            "already_member": True,
+        }
+
+    enforce_quota(
+        store,
+        len(store.projects.list_members(project.id)),
+        MAX_MEMBERS_PER_CONTEXT,
+        "members per context",
+    )
+    role = ACCESS_TO_ROLE[project.link_access]
+    store.projects.add_membership(project.id, user_id, role=role)
+    store.audit.emit(
+        "context.link_join", "membership", user_id,
+        project_id=project.id, actor_user_id=user_id,
+        meta={"access": project.link_access, "role": role},
+    )
+    return {
+        "ok": True,
+        "project_id": project.id,
+        "context_name": project.name,
+        "access": project.link_access,
+        "already_member": False,
+    }
+
+
+def list_shares(
+    store: SACStore, identity: RequestIdentity, base_url: str = ""
+) -> dict[str, Any]:
+    """Members, pending invites, and the link state for a context."""
     members = [
         {
             "user_id": m["user_id"],
@@ -213,4 +330,10 @@ def list_shares(store: SACStore, identity: RequestIdentity) -> dict[str, Any]:
         }
         for i in store.invites.list_pending(identity.project_id)
     ]
-    return {"ok": True, "members": members, "pending_invites": pending}
+    return {
+        "ok": True,
+        "members": members,
+        "pending_invites": pending,
+        "link": get_link(store, identity, base_url),
+        "can_share": identity.role in SHARER_ROLES,
+    }

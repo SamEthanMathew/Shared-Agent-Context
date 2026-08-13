@@ -102,6 +102,17 @@ projects = Table(
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("updated_at", DateTime(timezone=True), nullable=False),
     Column("archived_at", DateTime(timezone=True), nullable=True),
+    # "Anyone with the link" sharing, independent of per-person roles.
+    # `none` means invited people only. Deliberately never `manage`: a link must
+    # not confer the right to re-share (see app/api/sharing.py).
+    Column("link_access", String(8), nullable=False, default="none"),
+    # Stored in the clear because, unlike an emailed invite code, the owner has
+    # to be able to read the link back to hand it out again. Rotating replaces
+    # it, which is what invalidates copies already in circulation.
+    Column("link_token", String(64), nullable=True, unique=True),
+    CheckConstraint(
+        "link_access IN ('none','view','edit')", name="ck_project_link_access"
+    ),
 )
 
 memberships = Table(
