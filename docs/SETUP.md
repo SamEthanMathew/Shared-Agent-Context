@@ -63,7 +63,10 @@ revision.
 
 ## Sharing a context
 
-`/console/c/{id}` → **Share this context** → email + access level:
+Open the context in the web app and press **Share**. There are two independent
+dials, as in Google Docs.
+
+**Per person** — invite by email at a level:
 
 | Level | Can |
 |---|---|
@@ -71,32 +74,68 @@ revision.
 | **Edit** | Read, and publish shared + own private memory. |
 | **Manage** | Edit, plus share with others and change access. |
 
-If the address already has an account they get access immediately. If not, they
-receive an invite link; signing up through it joins them automatically. Invites
-expire, are single-use, bound to the address they were sent to, and revocable.
-A context always keeps at least one owner.
+If the address already has a **verified** account they get access immediately.
+Otherwise they receive an invite link; signing up through it joins them. An
+unverified account is deliberately treated as no account — otherwise anyone could
+register someone else's address and silently collect contexts shared to it.
+Invites expire, are single-use, bound to the address they were sent to, and
+revocable. A context always keeps at least one owner.
+
+**General access** — "anyone with the link":
+
+| Setting | Meaning |
+|---|---|
+| **Restricted** | Only the people invited above. The default. |
+| **Anyone with the link can view** | Read-only for whoever holds the link. |
+| **Anyone with the link can edit** | Read and publish for whoever holds the link. |
+
+A link can never grant **manage**. Manage carries the right to re-share, and a
+link that could pass that on would propagate access no human chose — so "who can
+share this" stays a per-person decision made by a named owner or manager. Only
+owners and managers can see the link itself, because holding it is equivalent to
+being able to share. **Generate a new link** invalidates every copy already
+circulating; people who already joined keep their access.
+
+Turning link sharing off stops new joins and does not evict anyone.
 
 ## What the service is
 
 One FastAPI process exposing:
 
 ```text
+/app                         The web app (React). Contexts, sharing, AI clients.
 /mcp                         MCP v2 Streamable HTTP (Claude + ChatGPT connectors)
-/v1/...                      REST mirror of the tools + sharing endpoints
+/v1/...                      REST API. Bearer tokens (agents) or session cookie (app)
 /.well-known/oauth-*         OAuth 2.1 discovery (RFC 8414 / 9728)
 /authorize /token /register  OAuth authorization-code + PKCE + dynamic registration
 /revoke
 /auth/signup /auth/login     Account creation and sign-in
+/auth/sso/{provider}/...     Sign in with Google or GitHub (when configured)
 /auth/verify /auth/forgot    Email verification and password reset
 /auth/consent                OAuth approval for a connecting client
 /auth/connections            Connected clients + revoke
-/invite/{code}               Accept a shared context
-/console                     Your contexts, create, archived, connected clients
-/console/c/{id}              One context: memories, members, sharing, audit, archive
+/invite/{code}               Accept a share sent to your email
+/c/{token}                   Join via an "anyone with the link" share
+/console                     Fallback server-rendered console
 /console/c/{id}/snapshots    What your agents were actually shown (per sync)
 /health                      Liveness (+ user count)
 /openapi.json                REST schema (servers block from SAC_PUBLIC_URL)
 ```
+
+`/app` is the product surface; `/console` is kept as a no-JavaScript fallback and
+links across to the app.
+
+### The web app
+
+Source in `web/`, built with Vite. **The build output is committed** to
+`app/static/app`, so deploying this Python service needs no Node toolchain. If you
+change anything under `web/src`, run `npm run build` in `web/` and commit the
+result — CI rebuilds and fails if the two have drifted. See `web/README.md`.
+
+The app authenticates with the ordinary login cookie rather than a token. Because
+a cookie is ambient, `/v1` requires a CSRF token on every write: the `sac_csrf`
+cookie echoed back in an `X-SAC-CSRF` header. Bearer-token callers (the AI
+clients) are unaffected.
 
 Backed by PostgreSQL on Render / SQLite locally. Identity, membership, private
 vs shared scope, and permission filtering are enforced **before** any memory
@@ -115,7 +154,43 @@ reaches a model.
 | `SAC_REQUIRE_VERIFIED_EMAIL` | `1` (default) blocks unverified accounts from creating contexts or accepting shares. |
 | `SAC_EMAIL_PROVIDER` | `console` (default, logs only) or `resend`. |
 | `RESEND_API_KEY` / `SAC_EMAIL_FROM` | Required when the provider is `resend`. |
+| `SAC_GOOGLE_CLIENT_ID` / `SAC_GOOGLE_CLIENT_SECRET` | Enables "Continue with Google". Absent → the button is not shown. |
+| `SAC_GITHUB_CLIENT_ID` / `SAC_GITHUB_CLIENT_SECRET` | Enables "Continue with GitHub". |
+| `SAC_SECRET_KEY` | Signs CSRF tokens. Optional: unset means a per-process key, so tokens stop validating across a restart and the app quietly reissues one. Set it to avoid that. |
 | `SAC_MAX_CONTEXTS_PER_USER` etc. | Quota overrides — see `app/limits.py`. |
+
+### Sign-in with Google or GitHub
+
+Neither Anthropic nor OpenAI offers consumer OAuth to third-party apps, so
+"sign in with your Claude account" cannot be built. Google and GitHub cover the
+actual need — not inventing another password — and the account behind a ChatGPT
+or Claude login is usually a Google one.
+
+To enable Google: create an OAuth client at
+`console.cloud.google.com` → APIs & Services → Credentials → *OAuth client ID*
+(type: Web application), with the authorized redirect URI:
+
+```text
+<SAC_BASE_URL>/auth/sso/google/callback
+```
+
+Then set `SAC_GOOGLE_CLIENT_ID` and `SAC_GOOGLE_CLIENT_SECRET`. GitHub is the
+same shape (Settings → Developer settings → OAuth Apps), callback
+`<SAC_BASE_URL>/auth/sso/github/callback`.
+
+When the provider says it verified the address, the account is marked verified
+here too — a second verification email would ask the user to prove the same fact
+twice. When it does not, the account stays unverified and, if that address already
+has an account, the sign-in is **refused rather than linked**: otherwise a
+provider that lets someone claim an unverified address becomes a way into
+another user's contexts.
+
+### Connecting a client as a brand-new user
+
+A person who has never visited the site can start from their AI client: add the
+connector, and the OAuth flow lands them on sign-in with a **Create one** link
+that carries the pending connection through signup and back to consent. They
+finish inside the client they started in.
 
 ## Deploy to Render
 
