@@ -17,11 +17,16 @@ from __future__ import annotations
 import os
 import sys
 
-from alembic import command
-from alembic.config import Config
-from sqlalchemy import inspect
+# Runs as `python scripts/migrate.py`, so the repo root is not on sys.path.
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
 
-from app.db import create_sac_engine
+from alembic import command  # noqa: E402
+from alembic.config import Config  # noqa: E402
+from sqlalchemy import inspect  # noqa: E402
+
+from app.db import create_sac_engine  # noqa: E402
 
 BASELINE = "0001"
 
@@ -31,7 +36,8 @@ def main() -> int:
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
 
-    cfg = Config(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "alembic.ini"))
+    cfg = Config(os.path.join(ROOT, "alembic.ini"))
+    cfg.set_main_option("script_location", os.path.join(ROOT, "migrations"))
     url = os.getenv("DATABASE_URL")
     if url:
         from app.db import normalize_database_url
