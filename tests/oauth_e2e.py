@@ -89,12 +89,40 @@ def main() -> int:
         hdr["mcp-session-id"] = sid
     c.post(f"{BASE}/mcp", headers=hdr,
            json={"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}})
-    r = c.post(f"{BASE}/mcp", headers=hdr, json={
-        "jsonrpc": "2.0", "id": 2, "method": "tools/call",
-        "params": {"name": "sac_status", "arguments": {}}})
-    assert r.status_code == 200, r.text
-    assert "v1_core_engine" in r.text
-    print("[ok] authenticated MCP initialize + sac_status")
+    def call(name: str, args: dict | None = None) -> dict:
+        resp = c.post(f"{BASE}/mcp", headers=hdr, json={
+            "jsonrpc": "2.0", "id": 9, "method": "tools/call",
+            "params": {"name": name, "arguments": args or {}}})
+        assert resp.status_code == 200, resp.text
+        return resp.json().get("result", {}).get("structuredContent") or {}
+
+    # The caller must be able to discover their contexts.
+    listed = call("sac_list_contexts")
+    assert listed.get("ok") is True, listed
+    print(f"[ok] sac_list_contexts -> {listed['count']} context(s)")
+
+    # Every tool must report which context it is working in. With more than one
+    # context and no binding, that means an actionable selection prompt.
+    status = call("sac_status")
+    if status.get("error") == "needs_context_selection":
+        assert status["contexts"], "selection prompt carried no candidates"
+        target = status["contexts"][0]["name"]
+        switched = call("sac_use_context", {"context": target})
+        assert switched.get("switched") is True, switched
+        print(f"[ok] needs_context_selection -> switched to '{target}'")
+        status = call("sac_status")
+    assert status.get("ok") is True, status
+    assert status.get("active_context", {}).get("name"), "no active context reported"
+    print(f"[ok] active context: {status['active_context']['name']}")
+
+    # And the round trip works inside that context.
+    remembered = call("sac_remember_shared", {
+        "kind": "decision", "summary": "OAuth end-to-end verified."})
+    assert remembered.get("ok") is True, remembered
+    synced = call("sac_sync_context", {"task": "what did we verify"})
+    assert "OAuth end-to-end verified." in synced.get("context_text", ""), synced
+    print("[ok] remember -> sync round trip")
+
     print("\nALL OAUTH E2E CHECKS PASSED")
     return 0
 

@@ -74,7 +74,10 @@ jobs:
           SAC_BOOTSTRAP_ADMIN_PASSWORD: ci-admin-pw
         run: |
           rm -f sac_v1.db
-          python -c "from app.stores import SACStore; from app.auth.bootstrap import bootstrap_admin; s=SACStore(); s.init(); uid=bootstrap_admin(s); s.projects.create_project('CI', owner_user_id=uid); print('seeded')"
+          # bootstrap_admin already creates a starter context; adding another
+          # here would make the admin ambiguous and (correctly) trigger
+          # needs_context_selection.
+          python -c "from app.stores import SACStore; from app.auth.bootstrap import bootstrap_admin; s=SACStore(); s.init(); uid=bootstrap_admin(s); print('seeded', uid)"
           uvicorn app.main:app --host 127.0.0.1 --port 8766 --proxy-headers > /tmp/sac-auth.log 2>&1 &
           SAC_PID=$!
           trap 'kill $SAC_PID 2>/dev/null || true' EXIT
