@@ -149,6 +149,29 @@ app.include_router(console_router)
 
 if AUTH_ENABLED:
 
+    @app.get(
+        "/.well-known/oauth-protected-resource/mcp", include_in_schema=False
+    )
+    def protected_resource_metadata() -> JSONResponse:
+        """Advertise both scopes on the resource.
+
+        The SDK derives the resource document's `scopes_supported` from
+        AuthSettings.required_scopes (mcpserver/server.py:1208). Leaving that at
+        ["sac.read"] made well-behaved clients — claude.ai among them — request
+        read-only access, so every publish then failed with "write scope
+        required" even for a member with edit access.
+
+        `required_scopes` stays minimal so a genuinely read-only token can still
+        connect and read; this document just tells clients that write exists and
+        is worth asking for.
+        """
+        return JSONResponse({
+            "resource": f"{PUBLIC_URL}/mcp",
+            "authorization_servers": [f"{PUBLIC_URL}/"],
+            "scopes_supported": ["sac.read", "sac.write"],
+            "bearer_methods_supported": ["header"],
+        })
+
     @app.get("/.well-known/oauth-authorization-server", include_in_schema=False)
     def authorization_server_metadata() -> JSONResponse:
         # The SDK's metadata handler doesn't advertise CIMD; inject it so ChatGPT

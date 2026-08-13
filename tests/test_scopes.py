@@ -153,3 +153,32 @@ def test_v1_requires_a_token_at_all(auth_app):
     r = client.get(f"/v1/projects/{seed.project_id}")
     assert r.status_code == 401
     assert "resource_metadata" in r.headers.get("WWW-Authenticate", "")
+
+
+# --- discovery metadata must advertise write ---------------------------------
+
+
+def test_resource_metadata_advertises_write_scope(auth_app):
+    """A client picks its scopes from this document.
+
+    The SDK derives scopes_supported from AuthSettings.required_scopes, which is
+    intentionally just sac.read, so the unpatched document advertised read-only.
+    claude.ai honoured that, requested read-only, and every publish then failed
+    with "write scope required" for a member who genuinely had edit access.
+    """
+    client, _ = auth_app
+    r = client.get("/.well-known/oauth-protected-resource/mcp")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert "sac.write" in body["scopes_supported"], (
+        "resource metadata must advertise sac.write or clients will request "
+        "read-only tokens and be unable to publish"
+    )
+    assert "sac.read" in body["scopes_supported"]
+    assert body["resource"].endswith("/mcp")
+
+
+def test_authorization_server_metadata_advertises_both_scopes(auth_app):
+    client, _ = auth_app
+    body = client.get("/.well-known/oauth-authorization-server").json()
+    assert set(body["scopes_supported"]) >= {"sac.read", "sac.write"}
