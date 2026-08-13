@@ -18,7 +18,6 @@ def _store(tmp_path) -> SACStore:
 def test_create_all_is_idempotent(tmp_path):
     store = _store(tmp_path)
     store.init()  # second call must not raise
-    # all 16 tables exist
     from app.db import metadata
 
     from sqlalchemy import inspect
@@ -34,6 +33,8 @@ def test_create_all_is_idempotent(tmp_path):
         "oauth_tokens", "login_sessions",
         # multi-context + accounts (V2)
         "context_bindings", "invites", "email_tokens", "rate_events",
+        # federated sign-in (V3)
+        "sso_identities",
     }
     assert expected <= names
     assert set(metadata.tables) == expected

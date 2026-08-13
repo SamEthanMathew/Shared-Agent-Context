@@ -80,6 +80,14 @@ def share_context(
     inviter = _display_name(store, identity.user_id)
 
     existing_user = store.projects.get_user_by_email(email)
+    # An account that never proved it controls the mailbox does not count as
+    # "this person already has an account". Otherwise anyone could register
+    # victim@example.com, leave it unverified, and silently collect every
+    # context later shared to that address. Falling through to the invite path
+    # means only whoever can read the mail can redeem it.
+    if existing_user and not store.auth.is_email_verified(existing_user["id"]):
+        existing_user = None
+
     if existing_user:
         if existing_user["id"] == identity.user_id:
             raise ValidationError("you already have access to this context")
@@ -125,7 +133,20 @@ def share_context(
 
 
 def accept_invite(store: SACStore, code: str, user_id: str) -> dict[str, Any]:
-    """Redeem an invite for an existing (already signed-in) user."""
+    """Redeem an invite for an existing (already signed-in) user.
+
+    Redeeming an invite looks like it should prove control of the mailbox it was
+    sent to, which would make the separate verification step redundant. It does
+    not: ``share_context`` returns ``invite_link`` to the *sharer* as well, so
+    the link can be delivered by hand when email is unavailable. Possession of a
+    code therefore proves only that you are the invitee **or the person who
+    issued it**.
+
+    That distinction has teeth. Without it, anyone could invite
+    victim@example.com, register that address themselves, redeem their own code,
+    and end up holding a *verified* account for an address they never controlled
+    — which the sharing path above then trusts. So the verification gate stays.
+    """
     require_verified(store, user_id, "accept a shared context")
     invite = store.invites.get_by_code(code)
     if invite is None:

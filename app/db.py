@@ -415,6 +415,26 @@ login_sessions = Table(
 
 # A share to an email address that may not have an account yet. Codes are
 # stored hashed, like tokens.
+sso_identities = Table(
+    "sso_identities",
+    metadata,
+    Column("id", String(36), primary_key=True),
+    Column("user_id", String(36), ForeignKey("users.id"), nullable=False),
+    # "google" | "github". Not an enum: adding a provider should not need a
+    # migration.
+    Column("provider", String(32), nullable=False),
+    # The provider's own stable id for the account — not the email, which people
+    # change. This is what a returning sign-in is matched on.
+    Column("provider_account_id", String(128), nullable=False),
+    Column("email", String(255), nullable=False, default=""),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("last_login_at", DateTime(timezone=True), nullable=True),
+    UniqueConstraint(
+        "provider", "provider_account_id", name="uq_sso_provider_account"
+    ),
+    Index("ix_sso_user", "user_id"),
+)
+
 invites = Table(
     "invites",
     metadata,

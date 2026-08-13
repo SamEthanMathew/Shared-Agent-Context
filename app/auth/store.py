@@ -22,6 +22,7 @@ from ..db import (
     login_sessions,
     oauth_clients,
     oauth_tokens,
+    sso_identities,
     users,
     utcnow,
 )
@@ -406,4 +407,71 @@ class AuthStore:
                     oauth_tokens.c.revoked_at.is_(None),
                 )
                 .values(revoked_at=utcnow())
+            )
+
+    # --- federated sign-in (Google / GitHub) --------------------------------
+
+    def get_sso_identity(self, provider: str, account_id: str) -> str | None:
+        """The local user id this provider account is already linked to."""
+        if not provider or not account_id:
+            return None
+        with self.engine.begin() as conn:
+            row = conn.execute(
+                select(sso_identities.c.user_id).where(
+                    sso_identities.c.provider == provider,
+                    sso_identities.c.provider_account_id == str(account_id),
+                )
+            ).first()
+        return row[0] if row else None
+
+    def link_sso_identity(
+        self, user_id: str, provider: str, account_id: str, email: str = ""
+    ) -> None:
+        """Record (or refresh) the link between a provider account and a user."""
+        now = utcnow()
+        with self.engine.begin() as conn:
+            existing = conn.execute(
+                select(sso_identities.c.id).where(
+                    sso_identities.c.provider == provider,
+                    sso_identities.c.provider_account_id == str(account_id),
+                )
+            ).first()
+            if existing:
+                conn.execute(
+                    update(sso_identities)
+                    .where(sso_identities.c.id == existing[0])
+                    .values(email=email or "", last_login_at=now)
+                )
+                return
+            conn.execute(
+                sso_identities.insert().values(
+                    id=str(uuid.uuid4()),
+                    user_id=user_id,
+                    provider=provider,
+                    provider_account_id=str(account_id),
+                    email=email or "",
+                    created_at=now,
+                    last_login_at=now,
+                )
+            )
+
+    def list_sso_identities(self, user_id: str) -> list[dict[str, Any]]:
+        """Which providers this account can sign in with — shown in settings."""
+        with self.engine.begin() as conn:
+            rows = conn.execute(
+                select(sso_identities)
+                .where(sso_identities.c.user_id == user_id)
+                .order_by(sso_identities.c.created_at)
+            ).all()
+        return [dict(r._mapping) for r in rows]
+
+    def unlink_sso_identity(self, user_id: str, provider: str) -> None:
+        from sqlalchemy import delete
+
+        with self.engine.begin() as conn:
+            conn.execute(
+                delete(sso_identities).where(
+                    sso_identities.c.user_id == user_id,
+                    sso_identities.c.provider == provider,
+                )
             )

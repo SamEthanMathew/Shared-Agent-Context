@@ -122,20 +122,42 @@ def _post_login_target(txn: str, next_url: str) -> str:
     return _safe_next(next_url) or "/console"
 
 
+def _carry(txn: str, next_url: str) -> str:
+    """Query string that preserves an in-flight connection across auth pages.
+
+    A new user arriving from a Claude or ChatGPT connector lands mid-OAuth. If
+    the link to the signup page drops `txn`, they finish creating an account and
+    the connection they were setting up has silently evaporated.
+    """
+    parts = []
+    if txn:
+        parts.append(f"txn={html.escape(txn, quote=True)}")
+    safe = _safe_next(next_url)
+    if safe:
+        parts.append(f"next={html.escape(safe, quote=True)}")
+    return ("?" + "&".join(parts)) if parts else ""
+
+
 @router.get("/auth/login", response_class=HTMLResponse)
 def login_form(
     request: Request, txn: str = "", error: str = "", next: str = ""
 ) -> HTMLResponse:
     err = f'<p class="muted" style="color:#b00">{html.escape(error)}</p>' if error else ""
     nxt = html.escape(_safe_next(next))
-    body = f"""<h1>Sign in to Shared Agent Context</h1>{err}
+    carry = _carry(txn, next)
+    connecting = (
+        '<p class="notice">Finish signing in to connect your AI client.</p>'
+        if txn else ""
+    )
+    body = f"""<h1>Sign in to Shared Agent Context</h1>{connecting}{err}
+{_sso_buttons(carry)}
 <form method="post" action="/auth/login">
 <input type="hidden" name="txn" value="{html.escape(txn)}">
 <input type="hidden" name="next" value="{nxt}">
 <label>Email</label><input name="email" type="email" autocomplete="username" required>
 <label>Password</label><input name="password" type="password" autocomplete="current-password" required>
 <button type="submit">Sign in</button></form>
-<p class="muted">No account? <a href="/auth/signup?next={nxt}">Create one</a> ·
+<p class="muted">No account? <a href="/auth/signup{carry}">Create one</a> ·
 <a href="/auth/forgot">Forgot password</a></p>"""
     return HTMLResponse(_page("Sign in", body))
 
@@ -177,6 +199,127 @@ def logout(request: Request):
     return resp
 
 
+# --- federated sign-in ------------------------------------------------------
+
+
+SSO_STATE_COOKIE = "sac_sso"
+
+
+def _sso_buttons(carry: str) -> str:
+    """Provider buttons, or nothing at all when none are configured."""
+    from .sso import enabled_providers
+
+    providers = enabled_providers()
+    if not providers:
+        return ""
+    links = "".join(
+        f'<p><a href="/auth/sso/{p.name}/start{carry}">'
+        f'<button type="button" class="secondary" style="width:100%">'
+        f"Continue with {html.escape(p.label)}</button></a></p>"
+        for p in providers
+    )
+    return f'{links}<p class="muted" style="text-align:center">or</p>'
+
+
+def _sso_redirect_uri(request: Request, provider_name: str) -> str:
+    """The callback URL, which must match what is registered with the provider."""
+    import os
+
+    base = (
+        os.getenv("SAC_PUBLIC_URL")
+        or os.getenv("RENDER_EXTERNAL_URL")
+        or str(request.base_url).rstrip("/")
+    ).rstrip("/")
+    return f"{base}/auth/sso/{provider_name}/callback"
+
+
+@router.get("/auth/sso/{provider_name}/start")
+def sso_start(provider_name: str, request: Request, next: str = "", txn: str = ""):
+    from .sso import authorize_url, get_provider, new_state
+
+    provider = get_provider(provider_name)
+    if provider is None:
+        return RedirectResponse(
+            "/auth/login?error=That+sign-in+method+is+not+available", status_code=303
+        )
+    if not _rate_ok(request, "login", provider_name):
+        return _too_many("/auth/login")
+
+    state = new_state()
+    resp = RedirectResponse(
+        authorize_url(provider, _sso_redirect_uri(request, provider.name), state),
+        status_code=303,
+    )
+    # The state is echoed by the provider and compared against this cookie, so a
+    # callback that the user did not initiate cannot be replayed at them. The
+    # destination rides along in the cookie rather than the state parameter to
+    # keep it out of the provider's logs.
+    payload = "|".join([state, _safe_next(next), txn])
+    resp.set_cookie(
+        SSO_STATE_COOKIE, payload, max_age=600, httponly=True,
+        secure=_secure(request), samesite="lax", path="/",
+    )
+    return resp
+
+
+@router.get("/auth/sso/{provider_name}/callback")
+def sso_callback(
+    provider_name: str,
+    request: Request,
+    code: str = "",
+    state: str = "",
+    error: str = "",
+):
+    from .sso import (
+        SSOError,
+        exchange_code,
+        fetch_profile,
+        get_provider,
+        link_or_create_user,
+    )
+
+    def _fail(message: str):
+        from urllib.parse import quote_plus
+
+        resp = RedirectResponse(
+            f"/auth/login?error={quote_plus(message)}", status_code=303
+        )
+        resp.delete_cookie(SSO_STATE_COOKIE, path="/")
+        return resp
+
+    provider = get_provider(provider_name)
+    if provider is None:
+        return _fail("That sign-in method is not available")
+    if error or not code:
+        return _fail("Sign-in was cancelled")
+
+    cookie = request.cookies.get(SSO_STATE_COOKIE) or ""
+    expected, _, rest = cookie.partition("|")
+    stored_next, _, stored_txn = rest.partition("|")
+    import hmac
+
+    if not expected or not hmac.compare_digest(expected, state or ""):
+        return _fail("That sign-in link has expired. Please try again")
+
+    store = get_store()
+    try:
+        token = exchange_code(
+            provider, code, _sso_redirect_uri(request, provider.name)
+        )
+        profile = fetch_profile(provider, token)
+        user_id = link_or_create_user(store, provider.name, profile)
+    except SSOError as exc:
+        return _fail(str(exc))
+
+    sid = store.auth.create_login_session(user_id)
+    resp = RedirectResponse(
+        _post_login_target(stored_txn, stored_next), status_code=303
+    )
+    set_session_cookies(resp, sid, secure=_secure(request))
+    resp.delete_cookie(SSO_STATE_COOKIE, path="/")
+    return resp
+
+
 # --- signup, verification, password reset -----------------------------------
 
 
@@ -184,17 +327,26 @@ MIN_PASSWORD = 10
 
 
 @router.get("/auth/signup", response_class=HTMLResponse)
-def signup_form(request: Request, error: str = "", next: str = "") -> HTMLResponse:
+def signup_form(
+    request: Request, error: str = "", next: str = "", txn: str = ""
+) -> HTMLResponse:
     err = f'<p class="muted" style="color:#b00">{html.escape(error)}</p>' if error else ""
     nxt = html.escape(_safe_next(next))
-    body = f"""<h1>Create your account</h1>{err}
+    carry = _carry(txn, next)
+    connecting = (
+        '<p class="notice">Create an account to finish connecting your AI client.</p>'
+        if txn else ""
+    )
+    body = f"""<h1>Create your account</h1>{connecting}{err}
+{_sso_buttons(carry)}
 <form method="post" action="/auth/signup">
 <input type="hidden" name="next" value="{nxt}">
+<input type="hidden" name="txn" value="{html.escape(txn)}">
 <label>Email</label><input name="email" type="email" autocomplete="username" required>
 <label>Password</label><input name="password" type="password" autocomplete="new-password" required>
 <p class="muted">At least {MIN_PASSWORD} characters.</p>
 <button type="submit">Create account</button></form>
-<p class="muted">Already have one? <a href="/auth/login?next={nxt}">Sign in</a></p>"""
+<p class="muted">Already have one? <a href="/auth/login{carry}">Sign in</a></p>"""
     return HTMLResponse(_page("Create account", body))
 
 
@@ -204,6 +356,7 @@ def signup_submit(
     email: str = Form(...),
     password: str = Form(...),
     next: str = Form(""),
+    txn: str = Form(""),
 ):
     from .. import email as mailer
 
@@ -212,19 +365,23 @@ def signup_submit(
     store = get_store()
     address = (email or "").strip().lower()
     nxt = _safe_next(next)
+    carry = _carry(txn, next)
 
     if len(password) < MIN_PASSWORD:
+        sep = "&" if carry else "?"
         return RedirectResponse(
-            f"/auth/signup?error=Password+must+be+at+least+{MIN_PASSWORD}+characters"
-            + (f"&next={nxt}" if nxt else ""),
+            f"/auth/signup{carry}{sep}"
+            f"error=Password+must+be+at+least+{MIN_PASSWORD}+characters",
             status_code=303,
         )
 
     existing = store.projects.get_user_by_email(address)
     if existing:
-        # Don't disclose that the address is taken; send them to sign in.
+        # Don't disclose that the address is taken; send them to sign in — still
+        # carrying the connection they were in the middle of setting up.
+        sep = "&" if carry else "?"
         return RedirectResponse(
-            "/auth/login?error=Try+signing+in+instead" + (f"&next={nxt}" if nxt else ""),
+            f"/auth/login{carry}{sep}error=Try+signing+in+instead",
             status_code=303,
         )
 
@@ -234,7 +391,7 @@ def signup_submit(
     mailer.send_verification(address, token)
 
     sid = store.auth.create_login_session(user_id)
-    resp = RedirectResponse(nxt or "/console", status_code=303)
+    resp = RedirectResponse(_post_login_target(txn, next), status_code=303)
     set_session_cookies(resp, sid, secure=_secure(request))
     return resp
 
