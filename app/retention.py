@@ -34,11 +34,13 @@ from sqlalchemy import delete, select
 from sqlalchemy.engine import Engine
 
 from .db import (
+    agent_connections,
     auth_transactions,
     authorization_codes,
     context_snapshots,
     email_tokens,
     login_sessions,
+    oauth_clients,
     oauth_tokens,
     utcnow,
 )
@@ -63,6 +65,16 @@ def _int_env(name: str, default: int) -> int:
 
 def snapshot_retention_days() -> int:
     return _int_env("SAC_RETENTION_DAYS_SNAPSHOTS", 90)
+
+
+def abandoned_client_grace_days() -> int:
+    """How long an unused client registration is given to be completed.
+
+    Generous on purpose: a legitimate registration is followed by consent within
+    seconds, so a day means only genuinely abandoned rows are removed, and never
+    one mid-handshake.
+    """
+    return _int_env("SAC_RETENTION_DAYS_ABANDONED_CLIENTS", 1)
 
 
 def revoked_token_retention_days() -> int:
@@ -207,6 +219,28 @@ def reap(engine: Engine) -> ReapReport:
         ),
     )
 
+    # Abandoned client registrations. /register is reachable without credentials,
+    # and rate limiting caps how *fast* rows arrive without bounding how many
+    # accumulate — so an unmetered table becomes a slowly-metered one. A real
+    # registration is followed by consent within seconds; one with no connection
+    # after the grace period was abandoned (or was a probe) and authenticates
+    # nothing. Clients that ever produced a connection are kept, including
+    # revoked ones, because the audit trail refers to them.
+    abandoned_cutoff = now - timedelta(days=abandoned_client_grace_days())
+    used_clients = select(agent_connections.c.oauth_client_id).where(
+        agent_connections.c.oauth_client_id.isnot(None)
+    )
+    report.add(
+        "oauth_clients",
+        _delete_batched(
+            engine,
+            oauth_clients,
+            (oauth_clients.c.created_at < abandoned_cutoff)
+            & oauth_clients.c.client_id.notin_(used_clients),
+            [oauth_clients.c.client_id],
+        ),
+    )
+
     # Rate-limit counters. The purge has existed since V2 and was never called
     # from anywhere, so every login attempt ever made is still on disk.
     before = _count_rate_events(engine)
@@ -248,6 +282,17 @@ def preview(engine: Engine) -> ReapReport:
         ("oauth_tokens", oauth_tokens, oauth_tokens.c.expires_at < now),
         ("login_sessions", login_sessions, login_sessions.c.expires_at < now),
         ("email_tokens", email_tokens, email_tokens.c.expires_at < now),
+        (
+            "oauth_clients",
+            oauth_clients,
+            (oauth_clients.c.created_at
+             < now - timedelta(days=abandoned_client_grace_days()))
+            & oauth_clients.c.client_id.notin_(
+                select(agent_connections.c.oauth_client_id).where(
+                    agent_connections.c.oauth_client_id.isnot(None)
+                )
+            ),
+        ),
         (
             "rate_events",
             rate_events,

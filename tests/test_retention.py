@@ -215,6 +215,92 @@ def test_todays_rate_counters_survive(seed):
     assert _count(seed.store.engine, rate_events) == 1
 
 
+# --- abandoned client registrations -----------------------------------------
+#
+# /register is reachable without credentials, so rate limiting caps how fast rows
+# arrive without bounding how many accumulate. Reaping the abandoned ones closes
+# that, but the table also holds every client anyone actually connected with — so
+# the interesting tests are the ones about what survives.
+
+
+def _register_client(seed, client_id: str, age_days: float = 0):
+    from sqlalchemy import update
+
+    from app.db import oauth_clients
+
+    now = utcnow()
+    with seed.store.engine.begin() as conn:
+        conn.execute(
+            oauth_clients.insert().values(
+                client_id=client_id, client_secret_hash=None,
+                token_endpoint_auth_method="none",
+                redirect_uris=["https://claude.ai/cb"],
+                grant_types=["authorization_code"], response_types=["code"],
+                scope="sac.read sac.write", client_name=client_id,
+                registration_source="dcr", raw_metadata={},
+                created_at=now, updated_at=now,
+            )
+        )
+        if age_days:
+            conn.execute(
+                update(oauth_clients)
+                .where(oauth_clients.c.client_id == client_id)
+                .values(created_at=now - timedelta(days=age_days))
+            )
+
+
+def test_an_abandoned_registration_is_deleted(seed):
+    from app.db import oauth_clients
+
+    _register_client(seed, "probe-client", age_days=3)
+    assert _count(seed.store.engine, oauth_clients) == 1
+    reap(seed.store.engine)
+    assert _count(seed.store.engine, oauth_clients) == 0
+
+
+def test_a_registration_that_produced_a_connection_is_kept(seed):
+    """Someone connected with this. Deleting it would break their client."""
+    from app.db import oauth_clients
+
+    _register_client(seed, "real-client", age_days=90)
+    seed.store.projects.create_agent_connection(
+        seed.alice_user_id, oauth_client_id="real-client", label="Claude"
+    )
+    reap(seed.store.engine)
+    assert _count(seed.store.engine, oauth_clients) == 1
+
+
+def test_a_revoked_connections_client_is_still_kept(seed):
+    """The audit trail refers to it, so it outlives the connection."""
+    from app.db import oauth_clients
+
+    _register_client(seed, "revoked-client", age_days=90)
+    conn_id = seed.store.projects.create_agent_connection(
+        seed.alice_user_id, oauth_client_id="revoked-client", label="Claude"
+    )
+    seed.store.projects.revoke_agent_connection(conn_id)
+    reap(seed.store.engine)
+    assert _count(seed.store.engine, oauth_clients) == 1
+
+
+def test_a_fresh_registration_is_not_reaped_mid_handshake(seed):
+    """A client registers, then the user goes to make coffee before consenting."""
+    from app.db import oauth_clients
+
+    _register_client(seed, "in-flight-client", age_days=0)
+    reap(seed.store.engine)
+    assert _count(seed.store.engine, oauth_clients) == 1
+
+
+def test_the_grace_period_is_configurable(seed, monkeypatch):
+    from app.db import oauth_clients
+
+    monkeypatch.setenv("SAC_RETENTION_DAYS_ABANDONED_CLIENTS", "30")
+    _register_client(seed, "recent-probe", age_days=10)
+    reap(seed.store.engine)
+    assert _count(seed.store.engine, oauth_clients) == 1
+
+
 # --- operational properties -------------------------------------------------
 
 

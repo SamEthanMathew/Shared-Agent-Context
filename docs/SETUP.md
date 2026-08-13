@@ -122,6 +122,7 @@ remove without removing it.
 | Expired OAuth transactions, codes, access tokens, sessions, email tokens | Deleted once expired. |
 | Revoked refresh tokens | 30 days, so "when did this connection lose access" stays answerable. |
 | Rate-limit counters | 1 day. |
+| Client registrations nobody completed | 1 day. `/register` needs no credentials, so rate limiting caps how *fast* rows arrive without bounding how many accumulate. A registration that produced a connection is kept indefinitely — including a revoked one, since the audit trail refers to it. |
 
 The 90-day window on sync records is a privacy decision, not only a storage one.
 Each record enumerates the memories fed to one person's agent — including their
@@ -142,8 +143,9 @@ revision.
 
 ## Sharing a context
 
-Open the context in the web app and press **Share**. There are two independent
-dials, as in Google Docs.
+Open the context in the web app and press **Share**. There are up to three
+independent dials — per person and by link, as in Google Docs, plus the
+organisation dial when the context belongs to one (see *Organisations* above).
 
 **Per person** — invite by email at a level:
 
