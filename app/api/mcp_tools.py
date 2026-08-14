@@ -24,7 +24,47 @@ from ..runtime import get_store
 from . import impl
 from .deps import auth_mode, resolve_context, resolve_identity, resolve_principal
 
-_READ_ONLY = ToolAnnotations(read_only_hint=True)
+# Every tool carries a title and the hints a host uses to decide how much to
+# interrupt the user. Getting these wrong is not cosmetic: `destructiveHint`
+# defaults to TRUE whenever a tool is not read-only, so leaving a write tool
+# unannotated tells Claude that "remember this decision" might destroy something,
+# and it prompts accordingly. Both Anthropic's and OpenAI's directories also
+# reject submissions whose tools lack a title or the applicable hint.
+
+
+def _reads(title: str) -> ToolAnnotations:
+    """A tool that returns data and changes nothing.
+
+    Idempotent by construction: asking twice yields the same answer, so a host is
+    free to retry after a dropped connection without asking the user first.
+    """
+    return ToolAnnotations(
+        title=title,
+        read_only_hint=True,
+        idempotent_hint=True,
+        open_world_hint=False,
+    )
+
+
+def _writes(title: str, *, idempotent: bool = False) -> ToolAnnotations:
+    """A tool that changes state but destroys nothing.
+
+    `destructive_hint=False` is a claim about the product, not a convenience:
+    nothing in Osmos deletes or overwrites memory. Superseding marks the older
+    revision as replaced and both remain readable through `sac_get_memory`, so no
+    call reachable from an agent can lose a fact someone recorded. If that ever
+    stops being true, this flag has to change with it.
+
+    `open_world_hint=False` because every one of these acts only on the caller's
+    own contexts. Nothing reaches the public internet or a third party.
+    """
+    return ToolAnnotations(
+        title=title,
+        read_only_hint=False,
+        destructive_hint=False,
+        idempotent_hint=idempotent,
+        open_world_hint=False,
+    )
 
 
 def _principal() -> Principal:
@@ -100,7 +140,7 @@ def register(mcp) -> None:
 
     # --- managing which context you are in ---------------------------------
 
-    @mcp.tool(structured_output=True, annotations=_READ_ONLY)
+    @mcp.tool(structured_output=True, annotations=_reads("List shared contexts"))
     def sac_list_contexts(actor_email: str | None = None) -> dict[str, Any]:
         """List every shared context available to the user.
 
@@ -120,7 +160,7 @@ def register(mcp) -> None:
 
         return _guard(run)
 
-    @mcp.tool(structured_output=True)
+    @mcp.tool(structured_output=True, annotations=_writes("Create a shared context"))
     def sac_create_context(
         name: str,
         description: str = "",
@@ -139,7 +179,10 @@ def register(mcp) -> None:
 
         return _guard(run)
 
-    @mcp.tool(structured_output=True)
+    @mcp.tool(
+        structured_output=True,
+        annotations=_writes("Switch active context", idempotent=True),
+    )
     def sac_use_context(
         context: str,
         scope: str = "client",
@@ -164,7 +207,7 @@ def register(mcp) -> None:
 
         return _guard(run)
 
-    @mcp.tool(structured_output=True, annotations=_READ_ONLY)
+    @mcp.tool(structured_output=True, annotations=_reads("Show the active context"))
     def sac_context_info(
         context: str | None = None, actor_email: str | None = None
     ) -> dict[str, Any]:
@@ -177,7 +220,7 @@ def register(mcp) -> None:
 
     # --- using the active context ------------------------------------------
 
-    @mcp.tool(structured_output=True)
+    @mcp.tool(structured_output=True, annotations=_writes("Sync shared context"))
     def sac_sync_context(
         task: str,
         session_ref: str = "default",
@@ -227,7 +270,7 @@ def register(mcp) -> None:
 
         return _guard(run)
 
-    @mcp.tool(structured_output=True)
+    @mcp.tool(structured_output=True, annotations=_writes("Save to shared memory"))
     def sac_remember_shared(
         kind: MemoryKind,
         summary: str,
@@ -252,7 +295,7 @@ def register(mcp) -> None:
             actor_email=actor_email,
         ))
 
-    @mcp.tool(structured_output=True)
+    @mcp.tool(structured_output=True, annotations=_writes("Save to private memory"))
     def sac_remember_private(
         kind: MemoryKind,
         summary: str,
@@ -277,7 +320,7 @@ def register(mcp) -> None:
             actor_email=actor_email,
         ))
 
-    @mcp.tool(structured_output=True, annotations=_READ_ONLY)
+    @mcp.tool(structured_output=True, annotations=_reads("List recent changes"))
     def sac_recent_changes(
         session_ref: str | None = None,
         since_revision: int | None = None,
@@ -299,7 +342,7 @@ def register(mcp) -> None:
 
         return _guard(run)
 
-    @mcp.tool(structured_output=True, annotations=_READ_ONLY)
+    @mcp.tool(structured_output=True, annotations=_reads("Open a memory's source"))
     def sac_get_source(
         source_id: str,
         context: str | None = None,
@@ -316,7 +359,7 @@ def register(mcp) -> None:
 
         return _guard(run)
 
-    @mcp.tool(structured_output=True, annotations=_READ_ONLY)
+    @mcp.tool(structured_output=True, annotations=_reads("Read a memory in full"))
     def sac_get_memory(
         memory_id: str,
         include_versions: bool = False,
@@ -339,7 +382,7 @@ def register(mcp) -> None:
 
         return _guard(run)
 
-    @mcp.tool(structured_output=True, annotations=_READ_ONLY)
+    @mcp.tool(structured_output=True, annotations=_reads("Summarise the active context"))
     def sac_project_info(
         context: str | None = None,
         project_id: str | None = None,
@@ -355,7 +398,7 @@ def register(mcp) -> None:
 
         return _guard(run)
 
-    @mcp.tool(structured_output=True, annotations=_READ_ONLY)
+    @mcp.tool(structured_output=True, annotations=_reads("Show connection status"))
     def sac_status(
         context: str | None = None,
         project_id: str | None = None,

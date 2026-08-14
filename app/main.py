@@ -157,8 +157,16 @@ async def lifespan(app: FastAPI):
         yield
 
 
+# FastAPI serves Swagger at /docs, ReDoc at /redoc and the schema at
+# /openapi.json by default, to anyone. On a consumer deployment that publishes
+# the entire internal API surface to any visitor, and /docs is also the address
+# the marketing site needs for human documentation — the one cited to the
+# Anthropic and OpenAI directory reviews, which the framework silently wins.
+# Off unless asked for, so a developer can still turn them on locally.
+_API_DOCS = os.getenv("SAC_ENABLE_API_DOCS", "").strip().lower() in ("1", "true", "yes")
+
 app = FastAPI(
-    title="Shared Agent Context",
+    title="Osmos",
     version="1.0.0",
     description=(
         "Model-agnostic shared project memory. MCP clients connect at /mcp; "
@@ -167,6 +175,9 @@ app = FastAPI(
     ),
     servers=[{"url": PUBLIC_URL}] if PUBLIC_URL else None,
     lifespan=lifespan,
+    docs_url="/api-docs" if _API_DOCS else None,
+    redoc_url="/api-redoc" if _API_DOCS else None,
+    openapi_url="/openapi.json" if _API_DOCS else None,
 )
 
 app.include_router(v1_router)

@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How Osmos works — Osmos</title>
+<meta name="description" content="Connect Osmos to Claude or ChatGPT, and every assistant you use starts from the same understanding of your project. Setup, what it can do, and what it will never do.">
+<link rel="canonical" href="https://withosmos.com/docs">
+<meta property="og:type" content="website">
+<meta property="og:title" content="How Osmos works — Osmos">
+<meta property="og:description" content="Connect once. Every assistant you use starts from the same understanding of your project.">
+<meta property="og:image" content="https://withosmos.com/assets/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<meta name="color-scheme" content="dark light">
+<script src="/boot.js"></script>
+<link rel="stylesheet" href="/osmos.css">
+<link rel="stylesheet" href="/styles.css">
+
+<!--
+  This is the documentation URL given to the Anthropic and OpenAI directory
+  reviews (docs/DIRECTORY_SUBMISSION.md), which is why it exists as its own page
+  rather than folding into /get-started. Both reviews require a public page
+  covering setup, what the connector does, and the auth flow, and a broken or
+  missing one is a rejection.
+
+  It deliberately does NOT enumerate tool names or transport internals. The
+  directory listing shows the tool list itself, and a reader arriving here wants
+  to know what the thing does for them.
+-->
+</head>
+
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="nav" id="nav">
+  <div class="container nav__inner">
+    <a class="nav__brand" href="/" aria-label="Osmos home">
+      <img class="nav__mark" src="/assets/osmos-mark-dark.svg" alt="" width="28" height="28">
+      <span class="nav__word">OSMOS</span>
+    </a>
+    <nav class="nav__links" aria-label="Primary">
+      <a class="nav__link" href="/#contexts">Contexts</a>
+      <a class="nav__link" href="/#sharing">Sharing</a>
+      <a class="nav__link" href="/pricing">Pricing</a>
+      <a class="nav__link" href="/security">Security</a>
+    </nav>
+    <div class="nav__actions">
+      <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch theme">
+        <svg class="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+      <a class="nav__link nav__link--action" href="/auth/login">Sign in</a>
+      <a class="btn btn--primary btn--sm" href="/auth/signup" data-osmos-event="signup_click">Start free</a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+
+  <section class="hero">
+    <div class="container">
+      <div class="hero__inner">
+        <h1 class="t-hero hero__title">Connect once. Every assistant catches up.</h1>
+        <p class="t-lead mt-4">Osmos is a shared memory for a project. Your assistant reads it at the start of a task and writes what it learned back at the end, so the next conversation — in any assistant, by any teammate — starts from what is already known.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2 class="t-h2" id="setup-h">Setting it up</h2>
+      <p class="t-lead mt-4">Two minutes, and the only thing you need to copy is one address.</p>
+
+      <div class="deflist mt-6" data-reveal>
+        <div class="deflist__row">
+          <span class="deflist__term">1. Create an account</span>
+          <span class="t-body">Sign up at <a href="/auth/signup">withosmos.com</a> with Google, GitHub, or an email address and a password. Confirm your email when the message arrives — you can start straight away, but sharing a context with someone else waits until you have.</span>
+        </div>
+        <div class="deflist__row">
+          <span class="deflist__term">2. Add the connector</span>
+          <span class="t-body">In Claude, open <strong>Customize &rsaquo; Connectors</strong>, choose <strong>Add custom connector</strong>, and paste this address:<br><code>https://withosmos.com/mcp</code><br>In ChatGPT, turn on <strong>Developer mode</strong> under Settings &rsaquo; Apps &rsaquo; Advanced, then add the same address.</span>
+        </div>
+        <div class="deflist__row">
+          <span class="deflist__term">3. Approve the connection</span>
+          <span class="t-body">Your assistant sends you to Osmos to sign in. You will see exactly which account is being connected and what the assistant will be allowed to do, and nothing happens until you approve it. Each assistant you connect is listed separately and can be cut off on its own.</span>
+        </div>
+        <div class="deflist__row">
+          <span class="deflist__term">4. Work normally</span>
+          <span class="t-body">Ask your assistant what the project has already decided, or tell it to remember something. There are no commands to learn. If you have no context yet, say &ldquo;make one&rdquo; and it will.</span>
+        </div>
+      </div>
+
+      <p class="t-small mt-6 measure">Claude requires a Pro or Max plan to add custom connectors. ChatGPT&rsquo;s developer mode is available on Plus, Pro, Business, Enterprise and Education plans, on the web.</p>
+    </div>
+  </section>
+
+  <section class="section section--alt">
+    <div class="container">
+      <h2 class="t-h2" id="use-h">What to ask it</h2>
+      <p class="t-lead mt-4">Ordinary sentences. The assistant decides when to reach for Osmos.</p>
+
+      <div class="deflist mt-6" data-reveal>
+        <div class="deflist__row">
+          <span class="deflist__term">&ldquo;What have we already decided here?&rdquo;</span>
+          <span class="t-body">Pulls the project&rsquo;s decisions, constraints and anything still unresolved into the conversation, so you are not re-explaining context you have explained before.</span>
+        </div>
+        <div class="deflist__row">
+          <span class="deflist__term">&ldquo;Remember that we chose Postgres, because we need full-text search.&rdquo;</span>
+          <span class="t-body">Records a decision with its reason. Every other assistant and every member of that context now starts from it.</span>
+        </div>
+        <div class="deflist__row">
+          <span class="deflist__term">&ldquo;What changed since I last worked on this?&rdquo;</span>
+          <span class="t-body">The catch-up view — what teammates and their assistants added while you were away.</span>
+        </div>
+        <div class="deflist__row">
+          <span class="deflist__term">&ldquo;Switch me to the mobile app project.&rdquo;</span>
+          <span class="t-body">Contexts work like documents. You can keep several and move between them, and each assistant remembers which one it is in.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2 class="t-h2" id="sharing-h">Sharing with people</h2>
+      <p class="t-lead mt-4">Like sharing a document, with one deliberate difference.</p>
+
+      <div class="deflist mt-6" data-reveal>
+        <div class="deflist__row">
+          <span class="deflist__term">Invite by email, or by link</span>
+          <span class="t-body">Give someone view or edit access. Their assistants pick the context up on the next sync — they do not have to do anything beyond joining.</span>
+        </div>
+        <div class="deflist__row">
+          <span class="deflist__term">Only people can share</span>
+          <span class="t-body">An assistant can read and write memory, and can never grant anyone access to anything. There is no tool for it to call. That is the difference: sharing is a decision a person makes.</span>
+        </div>
+        <div class="deflist__row">
+          <span class="deflist__term">Private stays private</span>
+          <span class="t-body">Anything you record privately is yours. It is excluded when the shared context is built for someone else&rsquo;s assistant — not filtered out of the answer afterwards, but never put in front of the model at all.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--alt">
+    <div class="container">
+      <h2 class="t-h2" id="limits-h">What it will not do</h2>
+      <p class="t-lead mt-4">Worth knowing before you rely on it.</p>
+
+      <div class="deflist mt-6" data-reveal>
+        <div class="deflist__row">
+          <span class="deflist__term">Send your memory anywhere</span>
+          <span class="t-body">Finding what is relevant to a task happens inside the same database your memory lives in. There is no embedding model and no summarising model, so no third party — including any model provider — ever receives the content. Nothing is used to train anything.</span>
+        </div>
+        <div class="deflist__row">
+          <span class="deflist__term">Delete what you recorded</span>
+          <span class="t-body">Correcting a memory marks the old version replaced rather than removing it, and both stay readable. Nothing is ever deleted to enforce a plan limit either — going over a limit stops you adding more, it does not destroy what is there.</span>
+        </div>
+        <div class="deflist__row">
+          <span class="deflist__term">Read your files or your screen</span>
+          <span class="t-body">Osmos only holds what you or your assistant deliberately record. It has no access to your machine, your repository, or anything else your assistant can see.</span>
+        </div>
+      </div>
+
+      <p class="t-small mt-6 measure">Questions, or a request to see or delete what we hold: <a href="mailto:hello@withosmos.com">hello@withosmos.com</a>. What we store and for how long is set out in the <a href="/privacy">privacy policy</a>.</p>
+    </div>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <div class="container">
+    <div class="footer__bottom footer__bottom--bare">
+      <span>© 2026 Osmos</span>
+      <span><a class="footer__home" href="/privacy">Privacy</a> · <a class="footer__home" href="/terms">Terms</a> · <a class="footer__home" href="/contact">Contact</a> · <a class="footer__home" href="/docs">Docs</a> · <a class="footer__home" href="/">Home</a></span>
+    </div>
+  </div>
+</footer>
+
+<script src="/theme.js"></script>
+<script src="/motion.js"></script>
+</body>
+</html>

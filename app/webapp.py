@@ -176,6 +176,17 @@ def site_contact() -> Response:
     return _site_page("contact.html")
 
 
+@router.get("/docs", include_in_schema=False)
+def site_docs() -> Response:
+    """Public documentation.
+
+    This is the URL given to the Anthropic and OpenAI directory reviews, both of
+    which reject a submission whose documentation link is missing or broken. It
+    has to keep resolving for as long as either listing exists.
+    """
+    return _site_page("docs.html")
+
+
 # The site's own stylesheets, scripts, and images. Named by extension rather
 # than served from a mount, because a mount at the root would sit in front of
 # the OAuth discovery documents and the MCP endpoint.
