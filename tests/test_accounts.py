@@ -85,13 +85,18 @@ def test_verify_link_marks_account_verified(web, monkeypatch):
     user = seed.store.projects.get_user_by_email("new@example.com")
     token = seed.store.auth.create_email_token(user["id"], "verify", timedelta(hours=1))
     r = c.get(f"/auth/verify?token={token}")
-    assert r.status_code == 200
+    # Verifying lands in the app rather than on a page whose only content is a
+    # link to it.
+    assert r.status_code == 303
+    assert r.headers["location"] == "/app"
     assert seed.store.auth.is_email_verified(user["id"]) is True
 
 
 def test_verify_token_is_single_use(web, seed):
     token = seed.store.auth.create_email_token(seed.alice_user_id, "verify", timedelta(hours=1))
     c, _ = web
+    # 200, not a redirect: this client holds no session, which is what opening
+    # the link in the browser that has the mailbox looks like.
     assert c.get(f"/auth/verify?token={token}").status_code == 200
     assert c.get(f"/auth/verify?token={token}").status_code == 400
 
@@ -104,13 +109,19 @@ def test_expired_verify_token_rejected(web, seed):
     assert c.get(f"/auth/verify?token={token}").status_code == 400
 
 
-def test_unverified_user_cannot_create_context(seed):
+def test_unverified_user_can_create_their_own_context(seed):
+    """The gate came off creation on purpose — app/api/impl.py:create_context.
+
+    A new account is signed in unverified and lands on an empty app; refusing
+    the only action on that screen left it with nowhere to go. What it still
+    cannot do is reach anyone else's context, which the tests below and
+    tests/test_onboarding_recovery.py pin from both directions.
+    """
     from app.api import impl
 
     uid = seed.store.projects.create_user("unverified@example.com", "U")
-    with pytest.raises(ForbiddenError) as exc:
-        impl.create_context(seed.store, Principal(uid, None), "Sneaky")
-    assert "verify your email" in str(exc.value)
+    out = impl.create_context(seed.store, Principal(uid, None), "Mine alone")
+    assert out["ok"] is True and out["created"] is True
 
 
 def test_unverified_user_cannot_accept_share(seed):
@@ -132,11 +143,14 @@ def test_unverified_user_cannot_accept_share(seed):
 
 
 def test_verification_gate_can_be_disabled(seed, monkeypatch):
-    from app.api import impl
-
+    """Checked at a still-gated call site: creation no longer has a gate to turn
+    off, so asserting it there would prove nothing about the switch."""
     monkeypatch.setenv("SAC_REQUIRE_VERIFIED_EMAIL", "0")
     uid = seed.store.projects.create_user("unverified@example.com", "U")
-    assert impl.create_context(seed.store, Principal(uid, None), "Fine")["ok"] is True
+    _id, code = seed.store.invites.create(
+        seed.project_id, role="member", created_by_user_id=seed.alice_user_id,
+    )
+    assert sharing.accept_invite(seed.store, code, uid)["ok"] is True
 
 
 # --- password reset ---------------------------------------------------------

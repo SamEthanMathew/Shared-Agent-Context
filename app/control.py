@@ -81,9 +81,12 @@ def home(request: Request):
     ) or '<tr><td colspan="4" class="muted">No contexts yet — create one below.</td></tr>'
 
     verified = store.auth.is_email_verified(uid)
+    # Creating no longer needs a verified address (api/impl.py:create_context),
+    # so this says what is actually still blocked — and offers another email,
+    # which is the one thing this banner never used to do.
     notice = "" if verified else (
-        '<p class="notice">Verify your email to create contexts or accept '
-        "invitations. Check your inbox for the link.</p>"
+        '<p class="notice">Verify your email to accept invitations or share a '
+        'context. <a href="/auth/verify/resend">Send the link again</a>.</p>'
     )
     # The console is now the fallback surface; point people at the real app.
     notice = (
@@ -175,7 +178,7 @@ def create_context(request: Request, name: str = Form(...), description: str = F
 
 
 @router.get("/c/{project_id}", response_class=HTMLResponse)
-def context_page(project_id: str, request: Request, joined: str = ""):
+def context_page(project_id: str, request: Request):
     store = get_store()
     uid = _user(request)
     if not uid:
@@ -188,12 +191,6 @@ def context_page(project_id: str, request: Request, joined: str = ""):
     project = store.projects.get_project(project_id)
     can_share = identity.role in ("owner", "admin")
     can_write = identity.role in ("owner", "admin", "member")
-
-    welcome = (
-        '<p class="notice">You\'ve joined this context. Connect an AI client to '
-        'start using it — see <a href="/console">your clients</a>.</p>'
-        if joined else ""
-    )
 
     shares = sharing.list_shares(store, identity)
     member_rows = "".join(
@@ -265,7 +262,7 @@ def context_page(project_id: str, request: Request, joined: str = ""):
         for a in store.audit.recent(project_id, limit=25)
     ) or '<tr><td colspan="3" class="muted">No activity yet.</td></tr>'
 
-    body = f"""<h1>{_esc(project.name)}</h1>{welcome}
+    body = f"""<h1>{_esc(project.name)}</h1>
 <p class="muted">Revision r{project.context_revision} · your access:
 {_esc(ROLE_TO_ACCESS.get(identity.role, identity.role))} · slug
 <code>{_esc(project.slug)}</code></p>

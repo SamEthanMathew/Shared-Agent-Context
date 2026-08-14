@@ -161,6 +161,21 @@ def site_pricing() -> Response:
     return _site_page("pricing.html")
 
 
+@router.get("/privacy", include_in_schema=False)
+def site_privacy() -> Response:
+    return _site_page("privacy.html")
+
+
+@router.get("/terms", include_in_schema=False)
+def site_terms() -> Response:
+    return _site_page("terms.html")
+
+
+@router.get("/contact", include_in_schema=False)
+def site_contact() -> Response:
+    return _site_page("contact.html")
+
+
 # The site's own stylesheets, scripts, and images. Named by extension rather
 # than served from a mount, because a mount at the root would sit in front of
 # the OAuth discovery documents and the MCP endpoint.

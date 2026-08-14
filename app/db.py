@@ -123,8 +123,9 @@ users = Table(
     Column("is_admin", Integer, nullable=False, default=0),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("disabled_at", DateTime(timezone=True), nullable=True),
-    # Account lifecycle (public signup). Unverified users may sign in and read
-    # but cannot create contexts or accept shares.
+    # Account lifecycle (public signup). Unverified users may sign in, read, and
+    # create their own contexts; they may not accept an invite, join by link,
+    # invite anyone by email, or create an organisation.
     Column("email_verified_at", DateTime(timezone=True), nullable=True),
     Column("last_login_at", DateTime(timezone=True), nullable=True),
     Column("failed_login_count", Integer, nullable=False, default=0),

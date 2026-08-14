@@ -19,7 +19,7 @@ const ORG_ROLES = [
   ['owner', 'Owner'],
 ]
 
-export default function OrgsView({ navigate, toast, onChanged }) {
+export default function OrgsView({ navigate, toast, onChanged, verified }) {
   const [orgs, setOrgs] = useState(null)
   const [selected, setSelected] = useState(null)
   const [creating, setCreating] = useState(false)
@@ -109,6 +109,7 @@ export default function OrgsView({ navigate, toast, onChanged }) {
 
       {creating ? (
         <CreateOrgDialog
+          verified={verified}
           onClose={() => setCreating(false)}
           onCreated={async (id) => {
             setCreating(false)
@@ -313,7 +314,7 @@ function OrgDetail({ orgId, navigate, toast, onChanged }) {
   )
 }
 
-function CreateOrgDialog({ onClose, onCreated }) {
+function CreateOrgDialog({ verified, onClose, onCreated }) {
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -343,13 +344,22 @@ function CreateOrgDialog({ onClose, onCreated }) {
           <button
             className="btn primary"
             onClick={submit}
-            disabled={busy || !name.trim()}
+            disabled={busy || !name.trim() || !verified}
           >
             {busy ? 'Creating…' : 'Create'}
           </button>
         </>
       }
     >
+      {!verified ? (
+        // Unlike a context of your own, this one the server still refuses. Say
+        // so before the name is typed instead of after the 403.
+        <div className="notice warn" style={{ marginBottom: 16 }}>
+          An organisation invites other people by definition, so it needs a
+          verified email address — the link is in your inbox. Your own contexts
+          work meanwhile.
+        </div>
+      ) : null}
       {error ? (
         <div className="notice error" style={{ marginBottom: 16 }}>
           {error}

@@ -54,7 +54,13 @@ def test_create_context_from_the_web(console):
     assert "Launch Plan" in names
 
 
-def test_unverified_user_cannot_create_from_web(seed, monkeypatch):
+def test_unverified_user_can_create_from_web(seed, monkeypatch):
+    """A brand-new account is signed in unverified and has nothing yet.
+
+    Refusing here left it staring at an empty page whose only control it was not
+    allowed to use — see app/api/impl.py:create_context for why creation is safe
+    to allow while accepting somebody else's invite is not.
+    """
     import app.runtime as runtime
 
     monkeypatch.setenv("SAC_AUTH_MODE", "dev")
@@ -71,9 +77,12 @@ def test_unverified_user_cannot_create_from_web(seed, monkeypatch):
     c = TestClient(app, follow_redirects=False)
     c.post("/auth/login", data={
         "email": "unverified@example.com", "password": "correct-horse-battery"})
-    r = c.post("/console/contexts", data={"name": "Nope"})
-    assert r.status_code == 400
-    assert "verify your email" in r.text
+    r = c.post("/console/contexts", data={"name": "Mine alone"})
+    assert r.status_code == 303
+    assert r.headers["location"].startswith("/console/c/")
+    assert [x["name"] for x in seed.store.projects.list_user_contexts(uid)] == [
+        "Mine alone"
+    ]
 
 
 def test_context_page_shows_memory_members_and_audit(console):

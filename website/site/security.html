@@ -16,6 +16,24 @@
 <script src="/boot.js"></script>
 <link rel="stylesheet" href="/osmos.css">
 <link rel="stylesheet" href="/styles.css">
+
+<!--
+  This is the page a procurement reviewer reads, so every line under "Enforced
+  today" has to be enforced today. The one that has already gone stale once:
+
+    address ownership   the verified-email gate covers accepting an invite
+                        (api/sharing.py:156), joining by link (:302), sending an
+                        invite (:74) and creating an organisation (rest.py:407).
+                        It does NOT cover creating a context — that gate was
+                        removed deliberately, and api/impl.py:create_context
+                        asks that it not be restored. This page claimed it for a
+                        while after it was gone. Note also that setting a share
+                        link (rest.py:180) is not gated on verification either,
+                        so do not add it to the list above without checking.
+
+  Move a gate and this page moves in the same commit; tests/test_site.py fails
+  if the old wording comes back.
+-->
 </head>
 
 <body>
@@ -94,7 +112,7 @@
         </div>
         <div class="deflist__row">
           <span class="deflist__term">Address ownership is proven</span>
-          <span class="t-body">An unverified account cannot create contexts or accept shares, and an unverified address is treated as no account at all — otherwise anyone could register someone else's address and quietly collect the contexts shared to it. Federated sign-in that cannot prove the address is refused rather than linked.</span>
+          <span class="t-body">Until an address is verified, that account cannot accept an invitation, join by a share link, send an invitation, or create an organisation — otherwise anyone could register someone else's address and quietly collect the contexts shared to it, or use us to send mail in our name. Making a context of your own is not gated, because it hands the maker nothing that was not already theirs. Federated sign-in that cannot prove the address is refused rather than linked.</span>
         </div>
         <div class="deflist__row">
           <span class="deflist__term">Where every claim came from</span>
@@ -213,7 +231,7 @@
   <div class="container">
     <div class="footer__bottom footer__bottom--bare">
       <span>© 2026 Osmos</span>
-      <span><a class="footer__home" href="/">Home</a></span>
+      <span><a class="footer__home" href="/privacy">Privacy</a> · <a class="footer__home" href="/terms">Terms</a> · <a class="footer__home" href="/contact">Contact</a> · <a class="footer__home" href="/">Home</a></span>
     </div>
   </div>
 </footer>

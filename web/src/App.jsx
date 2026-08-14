@@ -16,7 +16,7 @@ import OrgsView from './views/OrgsView.jsx'
 import { Link, contextIdFrom, useRoute } from './router.jsx'
 
 export default function App() {
-  const { path, navigate } = useRoute()
+  const { path, query, navigate } = useRoute()
   const { items: toasts, push } = useToasts()
 
   const [me, setMe] = useState(null)
@@ -34,6 +34,18 @@ export default function App() {
   useEffect(() => {
     refresh()
   }, [refresh])
+
+  // Verification happens in whichever tab opened the email, so this one can sit
+  // on a stale "unverified" until someone thinks to reload. A failure here is
+  // swallowed rather than routed through refresh(): a blip while the tab was in
+  // the background must not replace a working screen with the error page.
+  useEffect(() => {
+    const recheck = () => {
+      api.me().then(setMe, () => {})
+    }
+    window.addEventListener('focus', recheck)
+    return () => window.removeEventListener('focus', recheck)
+  }, [])
 
   if (error) {
     return (
@@ -82,11 +94,7 @@ export default function App() {
 
       {!me.user.email_verified ? (
         <div className="page" style={{ padding: '16px 24px 0' }}>
-          <div className="notice warn">
-            Check your inbox to verify <strong>{me.user.email}</strong>. Until
-            you do, you can read shared contexts but not create one or accept a
-            share.
-          </div>
+          <UnverifiedBanner email={me.user.email} />
         </div>
       ) : null}
 
@@ -95,6 +103,7 @@ export default function App() {
           key={activeId}
           contextId={activeId}
           me={me}
+          joined={query.get('joined') === '1'}
           navigate={navigate}
           toast={push}
           onChanged={refresh}
@@ -102,7 +111,12 @@ export default function App() {
       ) : path === '/clients' ? (
         <ClientsView contexts={contexts} toast={push} navigate={navigate} />
       ) : path === '/orgs' ? (
-        <OrgsView navigate={navigate} toast={push} onChanged={refresh} />
+        <OrgsView
+          navigate={navigate}
+          toast={push}
+          onChanged={refresh}
+          verified={me.user.email_verified}
+        />
       ) : (
         <ContextsView
           me={me}
@@ -129,6 +143,67 @@ export default function App() {
 
       <Toasts items={toasts} />
     </div>
+  )
+}
+
+/* The banner an unverified account lives under, and the way out of it.
+ *
+ * The first verification email can bounce, sit in spam, or have been sent to an
+ * address with a typo in it; without a resend the only route forward is a
+ * second account. Both outcomes are stated here rather than raised as a toast,
+ * because this banner is what the question "did that do anything" is asked of.
+ */
+function UnverifiedBanner({ email }) {
+  const [busy, setBusy] = useState(false)
+  const [asked, setAsked] = useState(false)
+  const [error, setError] = useState('')
+
+  const resend = async () => {
+    setBusy(true)
+    setError('')
+    try {
+      await api.resendVerification()
+      setAsked(true)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <div className="notice warn">
+        Check your inbox to verify <strong>{email}</strong>. Contexts of your
+        own already work, share link and all. Until you verify you cannot send
+        email invites, accept an invite or a share link from someone else, or
+        create an organisation.
+        <div className="row" style={{ marginTop: 10, flexWrap: 'wrap' }}>
+          <button className="btn sm" onClick={resend} disabled={busy}>
+            {busy ? 'Sending…' : 'Resend verification email'}
+          </button>
+          {asked ? (
+            // Not "Sent", and not "on its way": /auth/verify/resend answers with
+            // the same 303-to-200 whether it mailed anything, found no unverified
+            // account, or refused the click as too frequent. Nothing in that
+            // reply distinguishes them, so this reports the request and no more.
+            // The button stays live for the same reason — latching it on a click
+            // that sent nothing leaves the only way forward a second account.
+            <span className="tiny">
+              Asked for a new link to {email}. If one was sent it should arrive
+              within a minute or two — check spam, and give it a moment before
+              asking again, as only a few resends an hour are accepted. Links
+              last 24 hours.
+            </span>
+          ) : null}
+        </div>
+      </div>
+      {error ? (
+        <div className="notice error" style={{ marginTop: 8 }}>
+          {error}
+        </div>
+      ) : null}
+    </>
   )
 }
 
@@ -166,7 +241,7 @@ function CreateContextDialog({ verified, onClose, onCreated, toast }) {
           <button
             className="btn primary"
             onClick={submit}
-            disabled={busy || !name.trim() || !verified}
+            disabled={busy || !name.trim()}
           >
             {busy ? 'Creating…' : 'Create'}
           </button>
@@ -174,8 +249,15 @@ function CreateContextDialog({ verified, onClose, onCreated, toast }) {
       }
     >
       {!verified ? (
+        // Creating your own context no longer waits on verification, and neither
+        // does putting a link on it. Naming the three things that do beats the
+        // old blanket "sharing needs verification", which sent people to their
+        // inbox for something they could already do.
         <div className="notice warn" style={{ marginBottom: 16 }}>
-          Verify your email address first — the link is in your inbox.
+          Go ahead — this one is yours to make, and you can put a share link on
+          it straight away. Email invites, accepting someone else’s invite or
+          link, and organisations are what wait on a verified address; the link
+          is in your inbox.
         </div>
       ) : null}
       {error ? (

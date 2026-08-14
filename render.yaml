@@ -29,22 +29,36 @@ services:
         fromDatabase:
           name: sac-v1-db
           property: connectionString
+      # Pinned, because Render's default moves and this codebase is 3.13-only.
+      - key: PYTHON_VERSION
+        value: "3.13.4"
       - key: SAC_AUTH_MODE
         value: auth
       # RENDER_EXTERNAL_URL is injected automatically and used as the OAuth
-      # issuer. Set SAC_PUBLIC_URL only to override it (e.g. a custom domain).
+      # issuer. SAC_PUBLIC_URL overrides it, and the live deployment sets it to
+      # https://withosmos.com. It is not committed because moving the issuer
+      # invalidates every connected client, so it should be a deliberate
+      # dashboard change rather than something a blueprint apply can flip.
+      - key: SAC_PUBLIC_URL
+        sync: false
+      # localhost is here for MCP clients that complete OAuth against a loopback
+      # redirect; the hosted assistants use their own domains above.
       - key: SAC_ALLOWED_REDIRECT_HOSTS
-        value: claude.ai,claude.com,chatgpt.com,openai.com
+        value: claude.ai,claude.com,chatgpt.com,openai.com,localhost,127.0.0.1
       - key: SAC_CIMD_ALLOWED_HOSTS
         value: chatgpt.com,openai.com
-      # Unverified accounts can read but not create contexts or accept shares.
+      # Unverified accounts can read and create their own contexts; what this
+      # gates is reaching anyone else: accepting an invite, joining by link,
+      # inviting by email, and creating an organisation.
       - key: SAC_REQUIRE_VERIFIED_EMAIL
         value: "1"
-      # Outbound email. Without a provider key SAC still works, but verification
-      # and invite links are only written to the logs — set these before opening
-      # signup to real users.
+      # Outbound email. `console` only writes the message to the logs, which
+      # silently strands every new user: verification, invites and password
+      # resets all become undeliverable while the app reports success. The live
+      # deployment sends through Resend from a verified domain, so this declares
+      # `resend` and RESEND_API_KEY below is required, not optional.
       - key: SAC_EMAIL_PROVIDER
-        value: console
+        value: resend
       - key: SAC_EMAIL_FROM
         sync: false
       - key: RESEND_API_KEY
@@ -62,10 +76,28 @@ services:
         sync: false
       - key: SAC_BOOTSTRAP_ADMIN_PASSWORD
         sync: false
-      # Federated sign-in. Absent → the buttons are simply not rendered.
+      # Federated sign-in. A provider needs BOTH halves to count as enabled;
+      # absent → that button is simply not rendered, which is why a half-set
+      # pair fails silently rather than loudly.
       - key: SAC_GOOGLE_CLIENT_ID
         sync: false
       - key: SAC_GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: SAC_GITHUB_CLIENT_ID
+        sync: false
+      - key: SAC_GITHUB_CLIENT_SECRET
+        sync: false
+      # Billing. Absent → the product still runs, entirely on the Free plan, and
+      # the billing panel says so rather than erroring. The price ids are not
+      # secret but live here so the catalogue cannot drift between modes: a test
+      # key with live price ids fails in ways that are tedious to diagnose.
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PRO_MONTHLY_PRICE_ID
+        sync: false
+      - key: STRIPE_PRO_ANNUAL_PRICE_ID
         sync: false
       # Signs CSRF tokens. Without it they are per-process, so a restart makes
       # every open tab reissue one on its next /v1/me.

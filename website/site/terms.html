@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terms — Osmos</title>
+<meta name="description" content="The terms of using Osmos: your content stays yours, what each side is responsible for, how billing behaves, and how either of us can end it.">
+<link rel="canonical" href="https://withosmos.com/terms">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Terms — Osmos">
+<meta property="og:description" content="Your content stays yours. What each side is responsible for, and how billing behaves.">
+<meta property="og:image" content="https://withosmos.com/assets/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<meta name="color-scheme" content="dark light">
+<script src="/boot.js"></script>
+<link rel="stylesheet" href="/osmos.css">
+<link rel="stylesheet" href="/styles.css">
+
+<!--
+  The billing paragraphs here restate promises the code keeps — the 14-day grace
+  period, cancellation running to the end of a paid period, and nothing being
+  deleted for a billing reason. They come from app/billing/plans.py and are
+  asserted against it by tests/test_site.py through /pricing. Changing a billing
+  rule means changing three places: the code, /pricing, and this page. A term we
+  do not honour is a promise broken in writing.
+
+  "Look after your account" names the paths a verified address is required for.
+  That list is not decorative: it was written when creating a context was gated
+  too, and it went stale the day that gate was removed (app/api/impl.py:
+  create_context explains why it is gone and asks that it not be restored). The
+  gates that remain are api/sharing.py:74, :156, :302 and api/rest.py:407.
+  tests/test_site.py pins the wording so it cannot drift back.
+-->
+</head>
+
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="nav" id="nav">
+  <div class="container nav__inner">
+    <a class="nav__brand" href="/" aria-label="Osmos home">
+      <img class="nav__mark" src="/assets/osmos-mark-dark.svg" alt="" width="28" height="28">
+      <span class="nav__word">OSMOS</span>
+    </a>
+    <nav class="nav__links" aria-label="Primary">
+      <a class="nav__link" href="/#contexts">Contexts</a>
+      <a class="nav__link" href="/#sharing">Sharing</a>
+      <a class="nav__link" href="/pricing">Pricing</a>
+      <a class="nav__link" href="/security">Security</a>
+    </nav>
+    <div class="nav__actions">
+      <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch theme">
+        <svg class="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+      <a class="nav__link nav__link--action" href="/auth/login">Sign in</a>
+      <a class="btn btn--primary btn--sm" href="/auth/signup" data-osmos-event="signup_click">Start free</a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+
+  <section class="hero">
+    <div class="container">
+      <div class="hero__inner">
+        <h1 class="t-hero hero__title">Terms of service</h1>
+        <p class="t-lead hero__lead">What you can expect from Osmos, and what we expect from you. Written to be read, because terms nobody reads are terms nobody agreed to.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section--tight">
+    <div class="container">
+      <div class="notice measure">
+        <span class="notice__icon" aria-hidden="true">!</span>
+        <p>This is a draft, pending review. It has not been through a lawyer, and anything in square brackets is a detail still to be settled. Last updated 13 August 2026.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="agree-h">
+    <div class="container">
+      <div class="section__head" data-reveal>
+        <h2 class="t-h2" id="agree-h">The agreement</h2>
+      </div>
+      <div class="deflist" data-reveal>
+        <div class="deflist__row">
+          <span class="deflist__term">Who it is with</span>
+          <span class="t-body">Osmos — operated by Sam Ethan Mathew, an individual rather than a company — and you, or the organisation you are signing up on behalf of, in which case you are confirming you may agree for them. Written notice of any kind reaches us at <a href="mailto:hello@withosmos.com">hello@withosmos.com</a>.</span>
+        </div>
+        <div class="deflist__row">
+          <span class="deflist__term">When it starts</span>
+          <span class="t-body">When you create an account or connect an assistant. If you do not agree with what is here, do not do either.</span>
+        </div>
+        <div class="deflist__row">
+          <span class="deflist__term">Age</span>
+          <span class="t-body">You must be at least 13 to hold an account, or at least 16 if you are in the EEA or the UK.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="yours-h">
+    <div class="container">
+      <div class="section__head" data-reveal>
+        <span class="eyebrow">Ownership</span>
+        <h2 class="t-h2" id="yours-h">Your content stays yours</h2>
+      </div>
+      <div class="deflist" data-reveal>
+        <div class="deflist__row">
+          <span class="deflist__term">We claim nothing</span>
+          <span class="t-body">Your contexts, memory, and notes are yours. Using Osmos does not transfer any ownership of them, and ending your account does not either.</span>
+        </div>
+        <div class="deflist__row">
+          <span class="deflist__term">What we do need</span>
+          <span class="t-body">Permission to store your content, back it up, and show it to the people and assistants you have given access to — which is what running the service consists of. That permission covers nothing else, and it ends when the content is deleted.</span>
+        </div>
+        <div class="deflist__row">
+          <span class="deflist__term">What it is not used for</span>
+          <span class="t-body">Not training, not analysis, not marketing, and not sale. Nothing you write is sent to a third party to make Osmos work — see <a href="/privacy">privacy</a> for the whole list of who is involved and what each one gets.</span>
+        </div>
+        <div class="deflist__row">
+          <span class="deflist__term">Shared contexts are shared</span>
+          <span class="t-body">Publishing to a shared context makes that knowledge available to everyone with access to it, including after you leave, because the project it belongs to is not only yours. Your private notes stay private and go with you.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="use-h">
+    <div class="container">
+      <div class="section__head" data-reveal>
+        <span class="eyebrow">Using it</span>
+        <h2 class="t-h2" id="use-h">What we ask of you</h2>
+      </div>
+      <div class="grid grid--2" data-reveal-group>
+        <div class="card" data-reveal>
+          <h3 class="t-h3 card__title">Look after your account</h3>
+          <p class="t-body">Keep your credentials to yourself, and use the sharing controls rather than your login when you want someone else to have access. Tell us promptly if you think an account has been taken over. Until an address is verified it cannot accept an invitation, join by a share link, send an invitation, or create an organisation, which is deliberate.</p>
+        </div>
+        <div class="card" data-reveal>
+          <h3 class="t-h3 card__title">Your assistants act as you</h3>
+          <p class="t-body">Anything an assistant you connected reads or writes is treated as done by you, because it was done with your access. Connect the ones you trust with what the context holds, and disconnect any you no longer want reading it.</p>
+        </div>
+        <div class="card" data-reveal>
+          <h3 class="t-h3 card__title">Do not reach for what is not yours</h3>
+          <p class="t-body">No probing other people's contexts, no attempts to bypass the access checks, no automated traffic designed to exhaust the service. Rate limits exist and are enforced; working around them is a breach of this agreement rather than a puzzle.</p>
+        </div>
+        <div class="card" data-reveal>
+          <h3 class="t-h3 card__title">Content that is not allowed</h3>
+          <p class="t-body">Anything unlawful, anything you have no right to store, and anything designed to attack whoever reads it next. A memory layer is read by other people's assistants; poisoning it is aimed at them, not at us.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="pay-h">
+    <div class="container">
+      <div class="section__head" data-reveal>
+        <span class="eyebrow">Money</span>
+        <h2 class="t-h2" id="pay-h">Plans and payment</h2>
+        <p class="t-lead mt-4">The current prices and allowances are on the <a href="/pricing">pricing page</a>, and the rules below are the ones the code follows.</p>
+      </div>
+      <div class="deflist" data-reveal>
+        <div class="deflist__row">
+          <span class="deflist__term">Free is a plan, not a trial</span>
+          <span class="t-body">It does not expire and it does not ask for a card. Reaching a Free limit stops the next addition; it never removes what you already have.</span>
+        </div>
+        <div class="deflist__row">
+          <span class="deflist__term">Pro renews until you stop it</span>
+          <span class="t-body">Monthly or annually, per person, charged through Stripe. Adding someone charges for the part of the period they will use; removing someone ends their access immediately and lets the seat count fall at renewal, since that seat is already paid for.</span>
+        </div>
+        <div class="deflist__row">
+          <span class="deflist__term">Cancelling runs to the end of what you paid for</span>
+          <span class="t-body">You keep Pro until the paid period ends, then the workspace returns to the Free limits with every context and every memory intact.</span>
+        </div>
+        <div class="deflist__row">
+          <span class="deflist__term">A failed payment gets 14 days</span>
+          <span class="t-body">Service continues for a fortnight while you sort the card out. An expired card is not a decision to leave.</span>
+        </div>
+        <div class="deflist__row">
+          <span class="deflist__term">Nothing is deleted for a billing reason</span>
+          <span class="t-body">Not on downgrade, not on cancellation, not when a payment fails. This is a term, not only a courtesy.</span>
+        </div>
+        <div class="deflist__row">
+          <span class="deflist__term">Refunds</span>
+          <span class="t-body">Cancel at any time and you keep Pro until the period you have already paid for ends, as above. We do not refund the unused part of a period, so cancelling early buys time rather than money back. Prices are in US dollars and exclude any tax we are required to add.</span>
+        </div>
+        <div class="deflist__row">
+          <span class="deflist__term">Price changes</span>
+          <span class="t-body">If a price changes, we will tell account holders by email before it applies to them, and it never applies to a period already paid for.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="expect-h">
+    <div class="container">
+      <div class="section__head" data-reveal>
+        <span class="eyebrow">Honestly</span>
+        <h2 class="t-h2" id="expect-h">What we do not promise</h2>
+        <p class="t-lead mt-4">Stated plainly, because a product about inspectable knowledge cannot be vague about its own limits.</p>
+      </div>
+      <div class="grid grid--2" data-reveal-group>
+        <div class="card" data-reveal>
+          <h3 class="t-h3 card__title">No uptime guarantee yet</h3>
+          <p class="t-body">Osmos is provided as it is. We work to keep it available and we take backups, but there is no service-level agreement today, and you should not build something that cannot tolerate an outage on top of one that does not have one.</p>
+        </div>
+        <div class="card" data-reveal>
+          <h3 class="t-h3 card__title">No certifications</h3>
+          <p class="t-body">No SOC 2, ISO 27001, or HIPAA attestation. If your procurement needs one, tell us before you depend on us rather than after.</p>
+        </div>
+        <div class="card" data-reveal>
+          <h3 class="t-h3 card__title">Assistants can be wrong</h3>
+          <p class="t-body">Osmos gives your assistants better-informed material to reason over. It does not make their answers correct, and what they produce is still their output and your responsibility.</p>
+        </div>
+        <div class="card" data-reveal>
+          <h3 class="t-h3 card__title">Liability</h3>
+          <p class="t-body">To the extent the law allows, neither side is liable for indirect or consequential loss, and our total liability is limited to what you paid us in the twelve months before the claim. Nothing here limits anything that cannot lawfully be limited.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="end-h">
+    <div class="container">
+      <div class="section__head" data-reveal>
+        <h2 class="t-h2" id="end-h">Ending it</h2>
+      </div>
+      <div class="deflist" data-reveal>
+        <div class="deflist__row">
+          <span class="deflist__term">You, at any time</span>
+          <span class="t-body">Cancel Pro from your billing settings, or <a href="/contact">ask us</a> to close the account entirely and delete what it holds.</span>
+        </div>
+        <div class="deflist__row">
+          <span class="deflist__term">Us, rarely</span>
+          <span class="t-body">We may suspend an account that is breaking the rules above or putting the service at risk, and we will say which one and give you a chance to put it right where that is possible. A suspension for abuse is not a way to make a billing dispute move faster.</span>
+        </div>
+        <div class="deflist__row">
+          <span class="deflist__term">If Osmos shuts down</span>
+          <span class="t-body">You get notice and a window to take your data out before anything is removed. Announcing it afterwards would make the promise above worthless.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="admin-h">
+    <div class="container">
+      <div class="section__head" data-reveal>
+        <h2 class="t-h2" id="admin-h">The rest</h2>
+      </div>
+      <div class="deflist" data-reveal>
+        <div class="deflist__row">
+          <span class="deflist__term">Changes to these terms</span>
+          <span class="t-body">A change that affects your rights is announced by email to account holders before it takes effect. Anything that only makes the wording clearer appears here with the date at the top updated.</span>
+        </div>
+        <div class="deflist__row">
+          <span class="deflist__term">Governing law</span>
+          <span class="t-body">These terms are governed by the laws of the Commonwealth of Pennsylvania, United States, and any dispute will be heard by the state or federal courts located there.</span>
+        </div>
+        <div class="deflist__row">
+          <span class="deflist__term">Questions</span>
+          <span class="t-body">Anything here that is unclear is our problem to fix — <a href="mailto:hello@withosmos.com">hello@withosmos.com</a>, or the <a href="/contact">contact page</a>.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <div class="container">
+    <div class="footer__bottom footer__bottom--bare">
+      <span>© 2026 Osmos</span>
+      <span><a class="footer__home" href="/privacy">Privacy</a> · <a class="footer__home" href="/terms">Terms</a> · <a class="footer__home" href="/contact">Contact</a> · <a class="footer__home" href="/">Home</a></span>
+    </div>
+  </div>
+</footer>
+
+<script src="/theme.js"></script>
+<script src="/motion.js"></script>
+</body>
+</html>

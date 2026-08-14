@@ -380,7 +380,7 @@ def test_joining_through_the_page_grants_access(web):
     _login(c, "carol@example.com")
     r = c.post(f"/c/{token}/join")
     assert r.status_code == 303
-    assert r.headers["location"] == f"/console/c/{seed.project_id}?joined=1"
+    assert r.headers["location"] == f"/app/c/{seed.project_id}?joined=1"
     assert seed.store.projects.get_role(seed.project_id, seed.carol.user_id) == "viewer"
 
 
@@ -404,4 +404,4 @@ def test_an_existing_member_opening_the_link_lands_in_the_context(web):
     ).json()["token"]
     r = c.get(f"/c/{token}")
     assert r.status_code == 303
-    assert r.headers["location"] == f"/console/c/{seed.project_id}"
+    assert r.headers["location"] == f"/app/c/{seed.project_id}"

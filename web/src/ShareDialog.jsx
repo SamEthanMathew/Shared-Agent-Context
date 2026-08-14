@@ -18,7 +18,13 @@ const PERSON_LEVELS = [
   ['manage', 'Manager'],
 ]
 
-export default function ShareDialog({ context, onClose, onChanged, toast }) {
+export default function ShareDialog({
+  context,
+  verified,
+  onClose,
+  onChanged,
+  toast,
+}) {
   const [state, setState] = useState(null)
   const [email, setEmail] = useState('')
   const [access, setAccess] = useState('edit')
@@ -107,6 +113,18 @@ export default function ShareDialog({ context, onClose, onChanged, toast }) {
         </div>
       ) : null}
 
+      {canShare && !verified ? (
+        // can_share is about role, not about the account. Owning a context no
+        // longer needs a verified address, so an owner can reach this form and
+        // be answered with a 403 the API flattens to the bare word "forbidden"
+        // (app/main.py). Say what is blocked, and what isn't, before the click.
+        <div className="notice warn" style={{ marginBottom: 20 }}>
+          Sending an invite email needs a verified address — the link is in your
+          inbox. The share link further down works now, so a link is the way to
+          let someone in meanwhile.
+        </div>
+      ) : null}
+
       {canShare ? (
         <form onSubmit={invite} style={{ marginBottom: 24 }}>
           <label htmlFor="share-email">Invite by email</label>
@@ -131,7 +149,10 @@ export default function ShareDialog({ context, onClose, onChanged, toast }) {
                 </option>
               ))}
             </select>
-            <button className="btn primary" disabled={busy || !email.trim()}>
+            <button
+              className="btn primary"
+              disabled={busy || !email.trim() || !verified}
+            >
               Invite
             </button>
           </div>

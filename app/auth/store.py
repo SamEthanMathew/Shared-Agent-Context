@@ -30,7 +30,12 @@ from ..db import (
 ACCESS_TTL = timedelta(hours=1)
 REFRESH_TTL = timedelta(days=30)
 CODE_TTL = timedelta(minutes=5)
-TXN_TTL = timedelta(minutes=10)
+# The window covers everything between /authorize and consent, which for a
+# first-time user includes reading a signup form and choosing a password. Ten
+# minutes expired mid-form and cost them the connection: there is no way back to
+# a dead transaction from our side, so they had to restart "Add connector" in
+# Claude or ChatGPT.
+TXN_TTL = timedelta(minutes=30)
 LOGIN_TTL = timedelta(hours=12)
 
 

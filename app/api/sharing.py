@@ -66,6 +66,12 @@ def share_context(
     invite is created and the caller is handed a link to send them.
     """
     _require_sharer(identity)
+    # This gate used to be unreachable and is now load-bearing. Creating a
+    # context no longer needs a verified address (api/impl.py:create_context),
+    # so without it a throwaway account could make a context and use this path
+    # to send invite mail — from Osmos, to any address it chose — which is the
+    # whole apparatus of a spam relay.
+    require_verified(store, identity.user_id, "share a context")
     email = (email or "").strip().lower()
     if not email:
         raise ValidationError("email is required")

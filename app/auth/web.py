@@ -37,9 +37,18 @@ def _rate_ok(request: Request, bucket: str, extra: str = "") -> bool:
     return RateLimiter(get_store().engine).hit(key, limit, window)
 
 
-def _too_many(target: str) -> RedirectResponse:
+def _too_many(target: str, txn: str = "", next_url: str = "") -> RedirectResponse:
+    """Refuse the attempt without also throwing away where they were going.
+
+    A lockout redirected to a bare path, so one impatient retry mid-connection
+    dropped the OAuth transaction — and the punishment for retrying was going
+    back to Claude or ChatGPT and starting "Add connector" again, long after the
+    rate-limit window had passed.
+    """
+    carry = _carry(txn, next_url)
+    sep = "&" if carry else "?"
     return RedirectResponse(
-        f"{target}?error=Too+many+attempts.+Please+wait+and+try+again",
+        f"{target}{carry}{sep}error=Too+many+attempts.+Please+wait+and+try+again",
         status_code=303,
     )
 
@@ -229,6 +238,47 @@ def _carry(txn: str, next_url: str) -> str:
     return ("?" + "&".join(parts)) if parts else ""
 
 
+def _way_out(request: Request, txn: str = "", next_url: str = "") -> str:
+    """A door off a page that has nothing else on it.
+
+    Every one of these is the end of a road — an expired request, a refused
+    invite — and they rendered with no links at all. The back button is not a
+    way out either: someone who arrived from a connector has an OAuth redirect
+    behind them, not a page. A pending connection wins, then wherever they were
+    headed, then the app; signed out, the only useful door is sign-in.
+    """
+    if _current_user(request):
+        target = html.escape(_post_login_target(txn, next_url), quote=True)
+        return f'<p class="muted"><a href="{target}">Continue to Osmos</a></p>'
+    carry = _carry(txn, next_url)
+    return (
+        f'<p class="muted"><a href="/auth/login{carry}">Sign in</a> · '
+        f'<a href="/auth/signup{carry}">Create an account</a></p>'
+    )
+
+
+def _resend_block(request: Request, txn: str = "", next_url: str = "") -> str:
+    """The way out of a "verify your email first" refusal.
+
+    Signed in we know the address, so the form can act in one click. Signed out
+    we do not, and a GET must never send mail whoever follows it — so the link
+    goes to the page that asks for the address and holds the POST form.
+    """
+    if not _current_user(request):
+        carry = _carry(txn, next_url)
+        return (
+            f'<p class="muted"><a href="/auth/verify/resend{carry}">'
+            "Resend the verification email</a></p>"
+        )
+    return (
+        '<form method="post" action="/auth/verify/resend">'
+        f'<input type="hidden" name="txn" value="{html.escape(txn, quote=True)}">'
+        '<input type="hidden" name="next" '
+        f'value="{html.escape(_safe_next(next_url), quote=True)}">'
+        '<button type="submit">Resend verification email</button></form>'
+    )
+
+
 @router.get("/auth/login", response_class=HTMLResponse)
 def login_form(
     request: Request, txn: str = "", error: str = "", next: str = ""
@@ -249,7 +299,7 @@ def login_form(
 <label>Password</label><input name="password" type="password" autocomplete="current-password" required>
 <button type="submit">Sign in</button></form>
 <p class="muted">No account? <a href="/auth/signup{carry}">Create one</a> ·
-<a href="/auth/forgot">Forgot password</a></p>"""
+<a href="/auth/forgot{carry}">Forgot password</a></p>"""
     return HTMLResponse(_page("Sign in", body))
 
 
@@ -262,7 +312,7 @@ def login_submit(
     next: str = Form(""),
 ):
     if not _rate_ok(request, "login", email):
-        return _too_many("/auth/login")
+        return _too_many("/auth/login", txn, next)
     store = get_store()
     user = store.auth.verify_login(email, password)
     if not user:
@@ -334,7 +384,7 @@ def sso_start(provider_name: str, request: Request, next: str = "", txn: str = "
             "/auth/login?error=That+sign-in+method+is+not+available", status_code=303
         )
     if not _rate_ok(request, "login", provider_name):
-        return _too_many("/auth/login")
+        return _too_many("/auth/login", txn, next)
 
     state = new_state()
     resp = RedirectResponse(
@@ -369,11 +419,26 @@ def sso_callback(
         link_or_create_user,
     )
 
+    # Read the cookie before anything can fail, so every failure below can put
+    # the pending connection back on the sign-in page it sends people to.
+    cookie = request.cookies.get(SSO_STATE_COOKIE) or ""
+    expected, _, rest = cookie.partition("|")
+    stored_next, _, stored_txn = rest.partition("|")
+
     def _fail(message: str):
+        """Back to sign-in, still holding the connection they were setting up.
+
+        This is not only the error path. It fires on the ordinary "that email
+        already has an account here" collision, so a user who signed up with a
+        password and later clicked Google lost their in-flight connector for
+        doing nothing wrong.
+        """
         from urllib.parse import quote_plus
 
+        carry = _carry(stored_txn, stored_next)
+        sep = "&" if carry else "?"
         resp = RedirectResponse(
-            f"/auth/login?error={quote_plus(message)}", status_code=303
+            f"/auth/login{carry}{sep}error={quote_plus(message)}", status_code=303
         )
         resp.delete_cookie(SSO_STATE_COOKIE, path="/")
         return resp
@@ -384,9 +449,6 @@ def sso_callback(
     if error or not code:
         return _fail("Sign-in was cancelled")
 
-    cookie = request.cookies.get(SSO_STATE_COOKIE) or ""
-    expected, _, rest = cookie.partition("|")
-    stored_next, _, stored_txn = rest.partition("|")
     import hmac
 
     if not expected or not hmac.compare_digest(expected, state or ""):
@@ -452,7 +514,7 @@ def signup_submit(
     from .. import email as mailer
 
     if not _rate_ok(request, "signup"):
-        return _too_many("/auth/signup")
+        return _too_many("/auth/signup", txn, next)
     store = get_store()
     address = (email or "").strip().lower()
     nxt = _safe_next(next)
@@ -479,7 +541,10 @@ def signup_submit(
     user_id = store.projects.create_user(address, display_name=address)
     store.auth.set_password(user_id, password)
     token = store.auth.create_email_token(user_id, "verify", timedelta(hours=24))
-    mailer.send_verification(address, token)
+    # The link carries where they were going, so verifying — which may happen
+    # hours later, in whichever browser opened the mail — puts them back on the
+    # invite they were accepting rather than on a cold start.
+    mailer.send_verification(address, token, nxt)
 
     sid = store.auth.create_login_session(user_id)
     resp = RedirectResponse(_post_login_target(txn, next), status_code=303)
@@ -488,50 +553,175 @@ def signup_submit(
 
 
 @router.get("/auth/verify", response_class=HTMLResponse)
-def verify_email(token: str = ""):
+def verify_email(request: Request, token: str = "", next: str = ""):
     store = get_store()
     user_id = store.auth.consume_email_token(token, "verify")
     if not user_id:
         return HTMLResponse(
             _page("Verification", "<h1>That link is invalid or expired</h1>"
-                  '<p class="muted"><a href="/console">Go to your contexts</a></p>'),
+                  '<p class="muted">Verification links last 24 hours and work '
+                  "once.</p>" + _resend_block(request, next_url=next)
+                  + _way_out(request, next_url=next)),
             status_code=400,
         )
     store.auth.mark_email_verified(user_id)
-    return HTMLResponse(_page(
-        "Verified",
-        "<h1>Email verified</h1><p>Your account is fully active.</p>"
-        '<p><a href="/console">Go to your contexts</a></p>',
-    ))
+    if not _current_user(request):
+        # The mail is usually opened in whichever browser owns the mailbox, and
+        # that one holds no session. Redirecting it into the app only reaches
+        # /v1/me, gets a 401, and bounces to a bare sign-in form — so the click
+        # that did work reads as though it did nothing at all.
+        return HTMLResponse(_page("Email verified", (
+            "<h1>Email verified</h1>"
+            '<p class="muted">Your account is fully active. Sign in to '
+            "continue.</p>" + _way_out(request, next_url=next)
+        )))
+    # Signed in, so land in the product rather than on a page whose only content
+    # is a link to it. `next` comes from the mail we sent, so an invite that was
+    # in flight when they signed up is where they end up.
+    return RedirectResponse(_post_login_target("", next), status_code=303)
+
+
+# --- asking for another verification email ----------------------------------
+#
+# Until this existed the verification mail sent at signup was the only one there
+# would ever be. Lost, delayed, or filed as spam, and the account was stuck
+# unverified for good, with no route to another anywhere in the product.
+
+
+@router.get("/auth/verify/resend", response_class=HTMLResponse)
+def resend_form(
+    request: Request, sent: str = "", txn: str = "", next: str = "", error: str = ""
+):
+    """Ask for a new verification link. A GET only asks — POST sends.
+
+    `error` is not optional decoration: verify_resend is the tightest bucket in
+    LIMITS, and without the parameter FastAPI drops the one the rate limiter
+    redirects with. The page then comes back identical, on the one screen whose
+    entire subject is "the mail never came" — so the user clicks again, hits the
+    same wall, and is never told there is a wall.
+    """
+    if sent:
+        return HTMLResponse(_page("Check your email", (
+            "<h1>Check your email</h1>"
+            '<p class="muted">If that address has an account waiting to be '
+            "verified, a new link is on its way. It expires in 24 hours.</p>"
+            + _way_out(request, txn, next)
+        )))
+    err = f'<p class="muted err">{html.escape(error)}</p>' if error else ""
+    hidden = (
+        f'<input type="hidden" name="txn" value="{html.escape(txn, quote=True)}">'
+        '<input type="hidden" name="next" '
+        f'value="{html.escape(_safe_next(next), quote=True)}">'
+    )
+    uid = _current_user(request)
+    if uid:
+        store = get_store()
+        if store.auth.is_email_verified(uid):
+            # resend_submit mails nothing for an account that needs no link, so
+            # offering the button here promises a message that never arrives.
+            return HTMLResponse(_page("Verification", (
+                "<h1>Your email is already verified</h1>"
+                '<p class="muted">There is nothing to send — this account is '
+                "fully active.</p>" + _way_out(request, txn, next)
+            )))
+        account = store.projects.get_user(uid) or {}
+        address = account.get("email") or "your address"
+        body = f"""<h1>Resend verification email</h1>{err}
+<p class="muted">We'll send a new link to <b>{html.escape(address)}</b>.</p>
+<form method="post" action="/auth/verify/resend">{hidden}
+<button type="submit">Send it again</button></form>
+{_way_out(request, txn, next)}"""
+        return HTMLResponse(_page("Resend verification", body))
+    body = f"""<h1>Resend verification email</h1>{err}
+<p class="muted">Enter the address you signed up with.</p>
+<form method="post" action="/auth/verify/resend">{hidden}
+<label>Email</label><input name="email" type="email" autocomplete="username" required>
+<button type="submit">Send verification link</button></form>
+{_way_out(request, txn, next)}"""
+    return HTMLResponse(_page("Resend verification", body))
+
+
+@router.post("/auth/verify/resend")
+def resend_submit(
+    request: Request,
+    email: str = Form(""),
+    txn: str = Form(""),
+    next: str = Form(""),
+):
+    """Send a fresh verification link.
+
+    A signed-in session outranks whatever was typed in the form: it is the
+    stronger claim, and honouring the field for a logged-in caller would turn
+    any account into a way to mail arbitrary addresses.
+
+    The reply is the same page whether the address has an account, has none, or
+    is already verified — this endpoint must not become the account-existence
+    oracle that /auth/forgot is careful not to be.
+    """
+    from .. import email as mailer
+
+    store = get_store()
+    uid = _current_user(request)
+    address = (email or "").strip().lower()
+    if not _rate_ok(request, "verify_resend", uid or address):
+        return _too_many("/auth/verify/resend", txn, next)
+
+    user = (
+        store.projects.get_user(uid) if uid
+        else store.projects.get_user_by_email(address)
+    )
+    if user and not store.auth.is_email_verified(user["id"]):
+        token = store.auth.create_email_token(
+            user["id"], "verify", timedelta(hours=24)
+        )
+        mailer.send_verification(user["email"], token, _safe_next(next))
+
+    carry = _carry(txn, next)
+    sep = "&" if carry else "?"
+    return RedirectResponse(f"/auth/verify/resend{carry}{sep}sent=1", status_code=303)
 
 
 @router.get("/auth/forgot", response_class=HTMLResponse)
-def forgot_form(sent: str = ""):
+def forgot_form(sent: str = "", txn: str = "", next: str = ""):
+    # Reached from the sign-in page, which may be holding a connection — so this
+    # detour carries it too, and hands it back on the way to sign in.
+    carry = _carry(txn, next)
     if sent:
         return HTMLResponse(_page("Check your email", (
             "<h1>Check your email</h1><p class='muted'>If that address has an "
             "account, a reset link is on its way.</p>"
+            f'<p class="muted"><a href="/auth/login{carry}">Back to sign in</a></p>'
         )))
-    body = """<h1>Reset your password</h1>
+    body = f"""<h1>Reset your password</h1>
 <form method="post" action="/auth/forgot">
+<input type="hidden" name="txn" value="{html.escape(txn, quote=True)}">
+<input type="hidden" name="next" value="{html.escape(_safe_next(next), quote=True)}">
 <label>Email</label><input name="email" type="email" required>
-<button type="submit">Send reset link</button></form>"""
+<button type="submit">Send reset link</button></form>
+<p class="muted"><a href="/auth/login{carry}">Back to sign in</a></p>"""
     return HTMLResponse(_page("Reset password", body))
 
 
 @router.post("/auth/forgot")
-def forgot_submit(request: Request, email: str = Form(...)):
+def forgot_submit(
+    request: Request,
+    email: str = Form(...),
+    txn: str = Form(""),
+    next: str = Form(""),
+):
     from .. import email as mailer
 
     if not _rate_ok(request, "forgot", email):
-        return _too_many("/auth/forgot")
+        return _too_many("/auth/forgot", txn, next)
     store = get_store()
     user = store.projects.get_user_by_email(email)
     if user:
         token = store.auth.create_email_token(user["id"], "reset", timedelta(hours=1))
         mailer.send_password_reset(user["email"], token)
     # Same response either way — no account-existence oracle.
-    return RedirectResponse("/auth/forgot?sent=1", status_code=303)
+    carry = _carry(txn, next)
+    sep = "&" if carry else "?"
+    return RedirectResponse(f"/auth/forgot{carry}{sep}sent=1", status_code=303)
 
 
 @router.get("/auth/reset", response_class=HTMLResponse)
@@ -546,7 +736,9 @@ def reset_form(token: str = "", error: str = ""):
 
 
 @router.post("/auth/reset")
-def reset_submit(token: str = Form(...), password: str = Form(...)):
+def reset_submit(
+    request: Request, token: str = Form(...), password: str = Form(...)
+):
     store = get_store()
     if len(password) < MIN_PASSWORD:
         return RedirectResponse(
@@ -555,7 +747,11 @@ def reset_submit(token: str = Form(...), password: str = Form(...)):
     user_id = store.auth.consume_email_token(token, "reset")
     if not user_id:
         return HTMLResponse(
-            _page("Reset", "<h1>That link is invalid or expired</h1>"), status_code=400
+            _page("Reset", "<h1>That link is invalid or expired</h1>"
+                  '<p class="muted">Reset links last an hour and work once. '
+                  '<a href="/auth/forgot">Ask for a new one</a>.</p>'
+                  + _way_out(request)),
+            status_code=400,
         )
     store.auth.set_password(user_id, password)
     # A password reset also proves control of the mailbox.
@@ -569,6 +765,23 @@ def reset_submit(token: str = Form(...), password: str = Form(...)):
 # --- consent ----------------------------------------------------------------
 
 
+def _txn_expired(request: Request) -> HTMLResponse:
+    """Both consent handlers end here when the transaction is gone.
+
+    Nothing on this side can revive it — the client holds the request state — so
+    the only honest instruction is to start the connection again, which is worth
+    saying rather than leaving someone on a two-word page working out that the
+    connector they were adding never arrived.
+    """
+    return HTMLResponse(
+        _page("Request expired", "<h1>That connection request expired</h1>"
+              '<p class="muted">Go back to your AI client and add the Osmos '
+              "connector again — your account and contexts are untouched.</p>"
+              + _way_out(request)),
+        status_code=400,
+    )
+
+
 @router.get("/auth/consent", response_class=HTMLResponse)
 def consent_form(request: Request, txn: str = ""):
     store = get_store()
@@ -577,7 +790,7 @@ def consent_form(request: Request, txn: str = ""):
         return RedirectResponse(f"/auth/login?txn={txn}", status_code=303)
     tx = store.auth.get_transaction(txn)
     if not tx:
-        return HTMLResponse(_page("Error", "<h1>Request expired</h1>"), status_code=400)
+        return _txn_expired(request)
     client = store.auth.get_client(tx["client_id"])
     client_name = (client or {}).get("client_name") or tx["client_id"]
     from urllib.parse import urlparse
@@ -633,7 +846,7 @@ def consent_submit(
         return RedirectResponse(f"/auth/login?txn={txn}", status_code=303)
     tx = store.auth.get_transaction(txn)
     if not tx:
-        return HTMLResponse(_page("Error", "<h1>Request expired</h1>"), status_code=400)
+        return _txn_expired(request)
 
     if decision != "approve":
         store.auth.complete_transaction(txn)
@@ -711,7 +924,10 @@ def invite_landing(code: str, request: Request):
     invite = store.invites.get_by_code(code)
     if invite is None:
         return HTMLResponse(
-            _page("Invite", "<h1>This invite is invalid, expired, or already used</h1>"),
+            _page("Invite", "<h1>This invite is invalid, expired, or already used</h1>"
+                  '<p class="muted">Ask whoever shared it to send a new one — '
+                  "invites last 14 days and can only be accepted once.</p>"
+                  + _way_out(request)),
             status_code=404,
         )
     context_name = store.invites.get_project_name(invite["project_id"])
@@ -741,7 +957,10 @@ def invite_accept(code: str, request: Request):
     store = get_store()
     if not _rate_ok(request, "invite_accept"):
         return HTMLResponse(
-            _page("Slow down", "<h1>Too many attempts</h1>"), status_code=429
+            _page("Slow down", "<h1>Too many attempts</h1>"
+                  '<p class="muted">Wait a few minutes and open the invite '
+                  "again.</p>" + _way_out(request)),
+            status_code=429,
         )
     uid = _current_user(request)
     if not uid:
@@ -749,12 +968,22 @@ def invite_accept(code: str, request: Request):
     try:
         result = accept_invite(store, code, uid)
     except SACError as exc:
+        # The usual refusal here is the verification gate, which is fixable from
+        # this page: the resend carries the invite, so verifying comes straight
+        # back to it instead of dropping them somewhere they have to find it
+        # again.
+        message = str(exc)
+        fix = (
+            _resend_block(request, next_url=f"/invite/{code}")
+            if "verify" in message.lower() else ""
+        )
         return HTMLResponse(
-            _page("Invite", f"<h1>Could not join</h1><p>{html.escape(str(exc))}</p>"),
+            _page("Invite", f"<h1>Could not join</h1><p>{html.escape(message)}</p>"
+                  + fix + _way_out(request)),
             status_code=400,
         )
-    # Land on the context, and nudge toward connecting an AI client.
-    return RedirectResponse(f"/console/c/{result['project_id']}?joined=1", status_code=303)
+    # Land on the context in the app, and nudge toward connecting an AI client.
+    return RedirectResponse(f"/app/c/{result['project_id']}?joined=1", status_code=303)
 
 
 # --- joining by share link --------------------------------------------------
@@ -773,7 +1002,8 @@ def link_landing(token: str, request: Request):
     if project is None:
         return HTMLResponse(
             _page("Link", "<h1>This link is invalid or no longer active</h1>"
-                  '<p class="muted">Ask whoever shared it for a new one.</p>'),
+                  '<p class="muted">Ask whoever shared it for a new one.</p>'
+                  + _way_out(request)),
             status_code=404,
         )
     access = project.link_access
@@ -782,7 +1012,7 @@ def link_landing(token: str, request: Request):
     if uid:
         role = store.projects.get_role(project.id, uid)
         if role:
-            return RedirectResponse(f"/console/c/{project.id}", status_code=303)
+            return RedirectResponse(f"/app/c/{project.id}", status_code=303)
         body = f"""<h1>Join '{html.escape(project.name)}'</h1>
 <p>Anyone with this link can <b>{verb}</b> this shared context.</p>
 <form method="post" action="/c/{html.escape(token)}/join">
@@ -805,7 +1035,10 @@ def link_join(token: str, request: Request):
 
     if not _rate_ok(request, "invite_accept"):
         return HTMLResponse(
-            _page("Slow down", "<h1>Too many attempts</h1>"), status_code=429
+            _page("Slow down", "<h1>Too many attempts</h1>"
+                  '<p class="muted">Wait a few minutes and open the link '
+                  "again.</p>" + _way_out(request)),
+            status_code=429,
         )
     uid = _current_user(request)
     if not uid:
@@ -813,11 +1046,17 @@ def link_join(token: str, request: Request):
     try:
         result = join_by_link(get_store(), token, uid)
     except SACError as exc:
+        message = str(exc)
+        fix = (
+            _resend_block(request, next_url=f"/c/{token}")
+            if "verify" in message.lower() else ""
+        )
         return HTMLResponse(
-            _page("Link", f"<h1>Could not join</h1><p>{html.escape(str(exc))}</p>"),
+            _page("Link", f"<h1>Could not join</h1><p>{html.escape(message)}</p>"
+                  + fix + _way_out(request)),
             status_code=400,
         )
-    return RedirectResponse(f"/console/c/{result['project_id']}?joined=1", status_code=303)
+    return RedirectResponse(f"/app/c/{result['project_id']}?joined=1", status_code=303)
 
 
 @router.post("/auth/connections/{conn_id}/revoke")

@@ -21,6 +21,7 @@ Three risks follow, and every test here defends one of them.
 from __future__ import annotations
 
 import importlib
+import re
 
 import pytest
 from fastapi.testclient import TestClient
@@ -70,7 +71,21 @@ def test_a_stale_session_cookie_still_gets_the_site(client):
     assert "Different people. Different agents." in r.text
 
 
-@pytest.mark.parametrize("path", ["/get-started", "/security", "/pricing"])
+# Every page the site serves. Anything added to website/site and routed in
+# app/webapp.py belongs here: the checks below are the ones that only hold if
+# they hold everywhere — a footer link, a dead URL, a promise about data.
+ALL_PAGES = (
+    "/",
+    "/get-started",
+    "/security",
+    "/pricing",
+    "/privacy",
+    "/terms",
+    "/contact",
+)
+
+
+@pytest.mark.parametrize("path", [p for p in ALL_PAGES if p != "/"])
 def test_every_marketing_page_is_served(client, path):
     r = client.get(path)
     assert r.status_code == 200
@@ -142,12 +157,188 @@ def test_the_site_never_claims_data_lives_wherever_you_run_it(client):
         assert "Wherever you run it" not in client.get(path).text
 
 
+@pytest.mark.parametrize("path", ALL_PAGES)
+def test_no_page_links_to_the_private_repository(client, path):
+    """The footer's "Documentation" and get-started's "run your own copy" both
+    pointed at github.com/SamEthanMathew/Shared-Agent-Context. It is private, so
+    every visitor got a 404 — and the URL leaked the pre-rebrand codename while
+    offering self-hosting on a site that says there is nothing to install."""
+    body = client.get(path).text
+    assert "github.com/SamEthanMathew" not in body
+    assert "Shared-Agent-Context" not in body
+
+
+@pytest.mark.parametrize("path", ALL_PAGES)
+def test_every_page_carries_the_legal_links(client, path):
+    """People look for these in a footer and give up when one page has them and
+    the next does not. A buyer who cannot find the terms assumes the worst."""
+    body = client.get(path).text
+    for link in ('href="/privacy"', 'href="/terms"', 'href="/contact"'):
+        assert link in body, f"{path} is missing {link}"
+
+
+@pytest.mark.parametrize("path", ["/privacy", "/terms"])
+def test_the_legal_pages_admit_they_are_drafts(client, path):
+    """Both are accurate about the product and neither has been reviewed as a
+    document. A reader who mistakes an unreviewed draft for a signed policy was
+    misled by us, so the admission is visible rather than in a comment."""
+    assert "draft" in client.get(path).text.lower()
+
+
+def test_the_privacy_policy_lists_every_subprocessor(client):
+    """The list *is* the disclosure. One that quietly drops an entry is the kind
+    of wrong that surfaces in someone else's security review, not in ours."""
+    body = client.get("/privacy").text
+    for name in ("Render", "Resend", "Stripe", "Google", "GitHub"):
+        assert name in body, f"the subprocessor list no longer names {name}"
+
+
+def test_the_privacy_policy_makes_the_claim_the_code_supports(client):
+    """Ranking is full-text search in our own database — no embedding model, no
+    summarising model, nothing sent out to make retrieval work. It is why this
+    policy can be short, so it must survive an edit that tidies the page."""
+    body = client.get("/privacy").text
+    assert "third party" in body
+    assert "embedding model" in body
+
+
+def test_a_procurement_question_does_not_land_in_a_signup_form(client):
+    """The Enterprise "talk to us" CTA pointed at /auth/signup because there was
+    nowhere else to send it. Someone with a purchase order is not converting."""
+    assert 'href="/contact"' in client.get("/pricing").text
+
+
 def test_privacy_claims_that_the_memory_never_leaves(client):
     """New and now true: there is no embedding or summarisation model in the
     path, so nothing is sent anywhere to make retrieval work. It is the
     strongest privacy claim the product has, and it must be findable."""
     body = client.get("/security").text
     assert "third party" in body
+
+
+# --- claims that were false, and must not become false again ----------------
+#
+# Each of these shipped as a flat statement while the code did something else,
+# and one drift produced all of them: a gate moved, or a table was written to,
+# and the page describing it was not part of that change. Review did not catch
+# them — nothing about a stale sentence looks wrong — so they are pinned here.
+
+
+def test_the_privacy_policy_does_not_deny_holding_ip_addresses(client):
+    """It said "No IP addresses". The rate-limit table has held them all along.
+
+    ``_rate_ok`` keys the limiter on the caller's address (app/auth/web.py:36)
+    and ``RateLimiter.hit`` writes that key into ``rate_events``
+    (app/limits.py:132), so a live row reads
+    ``login:203.0.113.5:someone@example.com`` — the IP paired with the address
+    that was typed at it. It is the first claim a privacy reviewer checks and
+    the cheapest one to disprove, and a policy caught lying about IP addresses
+    is not read charitably afterwards. So the page states the narrow truth
+    instead: only in those counters, only to refuse the next attempt, and gone
+    within 24 hours (app/retention.py:246-248).
+    """
+    body = client.get("/privacy").text
+    assert "No IP addresses" not in body
+    assert "rate-limit counters" in body.lower()
+    assert "24 hours" in body
+
+
+@pytest.mark.parametrize("path", ["/terms", "/security"])
+def test_no_page_says_an_unverified_account_cannot_create_a_context(client, path):
+    """``create_context`` has no verification gate and deliberately must not
+    regain one — app/api/impl.py:create_context sets out why, and asks in as
+    many words that it not be restored. Both pages went on claiming the gate
+    after it was removed, and /security is what a procurement reviewer reads:
+    the sentence was doing work for us that the code had stopped doing.
+    """
+    body = client.get(path).text
+    for stale in ("cannot create contexts", "cannot create a context"):
+        assert stale not in body, f"{path} still claims the gate that was removed"
+
+
+@pytest.mark.parametrize("path", ["/terms", "/security"])
+def test_both_pages_list_the_gates_verification_still_covers(client, path):
+    """Naming them is what makes the claim checkable rather than reassuring:
+    sending an invite (api/sharing.py:74), accepting one (:156), joining by
+    link (:302), and creating an organisation (api/rest.py:407).
+
+    Setting a share link (api/rest.py:180) is absent on purpose — an unverified
+    user can do it, so listing it would repeat the mistake above in a new place.
+    """
+    body = client.get(path).text.lower()
+    for gated in (
+        "accept an invitation",
+        "join by a share link",
+        "send an invitation",
+        "create an organisation",
+    ):
+        assert gated in body, f"{path} no longer names {gated!r} as gated"
+
+
+# --- details that are settled, and the two that are not ---------------------
+
+
+# Square brackets are how these pages admit a detail is undecided. Both of
+# these are genuinely open: the governing law has not been chosen, and Render
+# does not publish a log retention period we could verify rather than guess.
+STILL_UNSETTLED = ("[governing law", "[Render's log retention")
+
+
+@pytest.mark.parametrize("path", ["/privacy", "/terms", "/contact"])
+def test_the_only_placeholders_left_are_the_ones_still_open(client, path):
+    """A bracket on a legal page is either an honest admission or a detail
+    somebody forgot to fill in, and the reader cannot tell which. Naming the
+    two that are real turns every other one into a failure here rather than a
+    thing a visitor finds."""
+    for found in re.findall(r"\[[A-Za-z][^\]]*\]", client.get(path).text):
+        assert found.startswith(STILL_UNSETTLED), f"{path} has an unfilled {found}"
+
+
+def test_the_privacy_policy_names_where_the_data_physically_is(client):
+    """Whether a buyer may use Osmos at all can turn on this, and "our host" is
+    not an answer to it. Both the web service and the Postgres database run in
+    Render's Oregon region."""
+    body = client.get("/privacy").text
+    assert "Oregon" in body
+    assert "United States" in body
+
+
+def test_the_legal_pages_say_who_is_actually_behind_osmos(client):
+    """Osmos is one person rather than a company, so there is no registered
+    office to publish — and publishing one anyway would mean publishing a home
+    address. A named operator plus an address that reaches him is the honest
+    substitute; "operated by [legal entity name]" was neither."""
+    for path in ("/privacy", "/terms"):
+        assert "Sam Ethan Mathew" in client.get(path).text
+
+
+@pytest.mark.parametrize(
+    "address",
+    ["hello@withosmos.com", "privacy@withosmos.com", "security@withosmos.com"],
+)
+def test_the_contact_addresses_are_links_someone_can_click(client, address):
+    """With no postal address and no form, these are the only route in. A
+    deletion request or a vulnerability report that lands nowhere is the
+    failure this guards against, so they are asserted as real mailto links
+    rather than as text that looks like one."""
+    assert f"mailto:{address}" in client.get("/contact").text
+
+
+def test_the_terms_state_the_refund_rule_the_billing_code_implements(client):
+    """``cancel`` sets cancel_at_period_end (app/billing/service.py:162-181) and
+    nothing is deleted on downgrade, so the real rule is "keep it to the end of
+    the period you paid for, no money back". Inventing a manual refund process
+    nobody has built would be a term we could not honour."""
+    assert "do not refund the unused part of a period" in client.get("/terms").text
+
+
+def test_the_terms_carry_an_age_and_a_liability_cap(client):
+    """Both read "[to be settled]", which on a terms page says we have not
+    thought about it. These are the owner's chosen defaults rather than advice,
+    but the page has to carry a number for either term to mean anything."""
+    body = client.get("/terms").text
+    assert "at least 13" in body
+    assert "twelve months before the claim" in body
 
 
 # --- pricing must agree with the code that charges --------------------------
@@ -182,9 +373,33 @@ def test_pricing_promises_nothing_is_deleted_for_a_billing_reason(client):
 # --- serving the files ------------------------------------------------------
 
 
+def test_the_click_attributes_have_something_listening(client):
+    """Nineteen [data-osmos-event] attributes shipped with no listener in any of
+    the site's scripts, so launch-day conversion data would have been silently
+    empty — the worst kind of empty, because the markup looks instrumented.
+
+    boot.js now delegates from `document`, which is also why the check is only
+    that the binding exists: with no collector configured it deliberately does
+    nothing, so behaviour is not observable from here."""
+    boot = client.get("/boot.js").text
+    assert "data-osmos-event" in boot
+    assert 'addEventListener("click"' in boot
+    for path in ALL_PAGES:
+        body = client.get(path).text
+        if "data-osmos-event" in body:
+            assert "/boot.js" in body, f"{path} instruments clicks without boot.js"
+
+
 @pytest.mark.parametrize(
     "asset",
-    ["/styles.css", "/osmos.css", "/theme.js", "/motion.js", "/assets/favicon.svg"],
+    [
+        "/styles.css",
+        "/osmos.css",
+        "/boot.js",
+        "/theme.js",
+        "/motion.js",
+        "/assets/favicon.svg",
+    ],
 )
 def test_the_sites_own_assets_are_served(client, asset):
     r = client.get(asset)

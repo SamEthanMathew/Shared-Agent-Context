@@ -15,6 +15,7 @@ import {
   describeAction,
   when,
 } from '../components.jsx'
+import ConnectGuide from '../ConnectGuide.jsx'
 import ShareDialog from '../ShareDialog.jsx'
 
 const TABS = [
@@ -24,9 +25,17 @@ const TABS = [
   ['sent', 'What AI saw'],
 ]
 
-export default function ContextView({ contextId, me, navigate, toast, onChanged }) {
+export default function ContextView({
+  contextId,
+  me,
+  joined,
+  navigate,
+  toast,
+  onChanged,
+}) {
   const [tab, setTab] = useState('memory')
   const [sharing, setSharing] = useState(false)
+  const [welcomed, setWelcomed] = useState(false)
   const [info, setInfo] = useState(null)
   const [error, setError] = useState('')
 
@@ -92,6 +101,28 @@ export default function ContextView({ contextId, me, navigate, toast, onChanged 
         ) : null}
       </div>
 
+      {/* The moment someone accepts an invite or opens a share link they land
+        * here, and it is the one moment they are certain to be paying attention
+        * to what to do next. Their own client is not connected yet, so without
+        * this they see a context that looks finished and never learn there is a
+        * step left. Dismissable because it is a greeting, not a warning. */}
+      {joined && !welcomed ? (
+        <>
+          <div className="notice" style={{ marginBottom: 16 }}>
+            You’ve joined <strong>{context.name}</strong>. Connect an AI client
+            and it works from this context — and publishes back into it.
+            <div className="row" style={{ marginTop: 10 }}>
+              <button className="btn sm" onClick={() => setWelcomed(true)}>
+                Got it
+              </button>
+            </div>
+          </div>
+          <div style={{ marginBottom: 24 }}>
+            <ConnectGuide title="Connect an AI client" />
+          </div>
+        </>
+      ) : null}
+
       <div className="tabs" role="tablist">
         {TABS.map(([key, label]) => (
           <button
@@ -118,6 +149,7 @@ export default function ContextView({ contextId, me, navigate, toast, onChanged 
       {sharing ? (
         <ShareDialog
           context={context}
+          verified={me.user.email_verified}
           onClose={() => setSharing(false)}
           onChanged={onChanged}
           toast={toast}
@@ -172,14 +204,22 @@ function MemoryTab({ context, me, toast }) {
       </div>
 
       {memories.length === 0 ? (
-        <div className="empty">
-          <h2>Nothing here yet</h2>
-          <p>
-            Memory arrives when an agent publishes something durable — a
-            decision, a requirement, a finding. Connect an AI client and start a
-            conversation.
-          </p>
-        </div>
+        <>
+          <div className="empty">
+            <h2>Nothing here yet</h2>
+            <p>
+              Memory arrives when an agent publishes something durable — a
+              decision, a requirement, a finding. Connect an AI client and start
+              a conversation.
+            </p>
+          </div>
+          {/* Where someone who just accepted a share lands: the context is
+            * empty until one of their own clients is connected, and telling
+            * them to connect one without saying how is the whole gap. */}
+          <div style={{ maxWidth: 560, margin: '0 auto' }}>
+            <ConnectGuide title="Connect an AI client" />
+          </div>
+        </>
       ) : (
         <div className="card">
           <div className="list">

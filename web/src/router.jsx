@@ -8,16 +8,27 @@ import { useCallback, useEffect, useState } from 'react'
 
 const BASE = '/app'
 
-function currentPath() {
-  const path = window.location.pathname
-  return path.startsWith(BASE) ? path.slice(BASE.length) || '/' : '/'
+/* Where we are: the path we route on, and the query that came with it.
+ *
+ * The query is not decoration. Accepting an invite and joining by link both
+ * finish server-side and redirect to /app/c/{id}?joined=1 (app/auth/web.py),
+ * and that flag is the only thing telling the SPA someone has just arrived
+ * rather than come back — read the pathname alone and every new joiner lands on
+ * a screen that says nothing about connecting a client.
+ */
+function currentRoute() {
+  const { pathname, search } = window.location
+  return {
+    path: pathname.startsWith(BASE) ? pathname.slice(BASE.length) || '/' : '/',
+    query: new URLSearchParams(search),
+  }
 }
 
 export function useRoute() {
-  const [path, setPath] = useState(currentPath)
+  const [route, setRoute] = useState(currentRoute)
 
   useEffect(() => {
-    const onPop = () => setPath(currentPath())
+    const onPop = () => setRoute(currentRoute())
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
   }, [])
@@ -26,11 +37,14 @@ export function useRoute() {
     const url = BASE + (to === '/' ? '' : to)
     if (replace) window.history.replaceState({}, '', url)
     else window.history.pushState({}, '', url)
-    setPath(to)
+    // Split rather than store `to` whole: a caller passing "/c/x?joined=1" must
+    // not end up with the query glued onto the path every route test matches.
+    const [path, search = ''] = to.split('?')
+    setRoute({ path: path || '/', query: new URLSearchParams(search) })
     window.scrollTo(0, 0)
   }, [])
 
-  return { path, navigate }
+  return { path: route.path, query: route.query, navigate }
 }
 
 /** Match /c/:id, returning the id or null. */

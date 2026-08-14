@@ -64,6 +64,11 @@ async function request(method, path, body) {
 export const api = {
   me: () => request('GET', '/v1/me'),
 
+  // Not /v1: verification belongs to the session surface in app/auth/web.py,
+  // and it is the one thing the app asks for on behalf of a user who cannot yet
+  // do anything else.
+  resendVerification: () => request('POST', '/auth/verify/resend'),
+
   contexts: () => request('GET', '/v1/contexts'),
   createContext: (name, description = '') =>
     request('POST', '/v1/contexts', { name, description }),

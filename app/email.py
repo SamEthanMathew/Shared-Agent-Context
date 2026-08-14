@@ -88,8 +88,16 @@ def send(email: Email) -> bool:
 # --- message templates ------------------------------------------------------
 
 
-def send_verification(to: str, token: str) -> bool:
+def send_verification(to: str, token: str, next_url: str = "") -> bool:
     link = f"{_public_url()}/auth/verify?token={token}"
+    if next_url:
+        # Where they were going when they signed up. Verification often happens
+        # much later and in a different browser, so the destination has to ride
+        # in the link — nothing else survives the round trip through a mailbox.
+        # The path is re-checked against `_safe_next` when it comes back.
+        from urllib.parse import quote
+
+        link += f"&next={quote(next_url, safe='/')}"
     return send(Email(
         to=to,
         subject="Verify your Osmos email",

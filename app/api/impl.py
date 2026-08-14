@@ -8,7 +8,7 @@ from typing import Any
 from ..context import compile_context
 from ..errors import ValidationError
 from ..identity import Principal, RequestIdentity
-from ..limits import MAX_CONTEXTS_PER_USER, enforce_quota, require_verified
+from ..limits import MAX_CONTEXTS_PER_USER, enforce_quota
 from ..models import ROLE_TO_ACCESS
 from ..stores import SACStore
 
@@ -39,10 +39,20 @@ def create_context(
 ) -> dict[str, Any]:
     """Create a context, make the caller its owner, and select it.
 
-    Requires a verified email: it is the cheapest effective control against
-    throwaway accounts creating contexts in bulk.
+    There is deliberately no verification gate here — do not restore one. The
+    gate stays on accepting an invite and joining by link (the reasoning is at
+    api/sharing.py:accept_invite) because those hand over a context somebody
+    else owns on the strength of a code that proves only possession, so the
+    redeemer has to establish they control the mailbox first. Creating a context
+    hands over nothing: the caller becomes the sole member of something that did
+    not exist a moment ago, and reaches no data and no other person by doing it.
+
+    It was also the wall every new account hit. Signup logs you in unverified,
+    the app opens on an empty context list, and the one action on that screen
+    refused — leaving the verification mail, the single thing a new user may
+    never have received, as the only way forward. Bulk creation is bounded by
+    the quota below and by the plan check; neither needs a verified address.
     """
-    require_verified(store, principal.user_id, "create a context")
     # Plan entitlement. Personal (org-less) use is Free, so this is where a
     # workspace hits its context ceiling. It refuses an *addition* only —
     # nothing existing is touched.

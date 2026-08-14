@@ -86,7 +86,14 @@ def enforce_quota(store, current: int, limit: int, noun: str) -> None:
 
 
 def require_verified(store, user_id: str, action: str) -> None:
-    """Unverified accounts may read, but not create or accept."""
+    """Gate the actions that reach somebody else.
+
+    An unverified account may work alone — read, and create its own contexts
+    (see api/impl.py:create_context) — but may not accept an invite, join by
+    link, share, or start an organisation. Each of those either takes data
+    another person owns or sends mail in our name, and none of them may rest on
+    an address nobody has proved they can read.
+    """
     if os.getenv("SAC_REQUIRE_VERIFIED_EMAIL", "1") not in ("1", "true", "True"):
         return
     if not store.auth.is_email_verified(user_id):
@@ -167,6 +174,10 @@ LIMITS: dict[str, tuple[int, int]] = {
     "login": (10, 300),
     "signup": (5, 3600),
     "forgot": (5, 3600),
+    # Deliberately tighter than "forgot": the address is not asked to prove
+    # anything before we send, so this is the cheapest way to make us mail a
+    # stranger repeatedly.
+    "verify_resend": (3, 3600),
     "invite_accept": (20, 3600),
     "token": (60, 300),
     "register": (10, 3600),

@@ -1,5 +1,6 @@
 /* The home screen: every context available to you. */
 import { accessLabel } from '../components.jsx'
+import ConnectGuide from '../ConnectGuide.jsx'
 import { Link } from '../router.jsx'
 
 export default function ContextsView({ me, navigate, onCreate }) {
@@ -18,6 +19,14 @@ export default function ContextsView({ me, navigate, onCreate }) {
           <button className="btn primary" onClick={onCreate}>
             Create your first context
           </button>
+        </div>
+
+        {/* The other half of the first run. Nothing here works until an AI
+          * client is pointed at the MCP URL, and this is the screen a new
+          * account lands on — leaving the instructions behind a nav link they
+          * have no reason to click is how people stall. */}
+        <div style={{ maxWidth: 560, margin: '0 auto' }}>
+          <ConnectGuide />
         </div>
       </div>
     )
