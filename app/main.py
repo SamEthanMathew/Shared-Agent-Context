@@ -216,8 +216,7 @@ if AUTH_ENABLED:
             "bearer_methods_supported": ["header"],
         })
 
-    @app.get("/.well-known/oauth-authorization-server", include_in_schema=False)
-    def authorization_server_metadata() -> JSONResponse:
+    def _authorization_server_metadata() -> dict[str, Any]:
         # The SDK's metadata handler doesn't advertise CIMD; inject it so ChatGPT
         # uses Client ID Metadata Documents instead of falling back to DCR.
         from pydantic import AnyHttpUrl
@@ -236,7 +235,32 @@ if AUTH_ENABLED:
         )
         body = metadata.model_dump(exclude_none=True, mode="json")
         body["client_id_metadata_document_supported"] = True
-        return JSONResponse(body)
+        return body
+
+    @app.get("/.well-known/oauth-authorization-server", include_in_schema=False)
+    def authorization_server_metadata() -> JSONResponse:
+        return JSONResponse(_authorization_server_metadata())
+
+    @app.get("/.well-known/openid-configuration", include_in_schema=False)
+    def openid_configuration() -> JSONResponse:
+        """The same document, at the path OpenID Connect clients look in.
+
+        ChatGPT does not follow the RFC 9728 `resource_metadata` pointer we put in
+        the 401's WWW-Authenticate header. When a call to /mcp comes back 401 it
+        probes here instead, and a 404 leaves it with no way to discover the
+        authorization server — so every tool call failed with an opaque
+        "unhandled errors in a TaskGroup", which names nothing a user could act
+        on. Observed directly: four POST /mcp -> 401 followed by four
+        GET /.well-known/openid-configuration -> 404 from ChatGPT's Azure range.
+
+        The body is the OAuth 2.0 authorization-server metadata, unchanged. This
+        server is not an OpenID provider: it issues no ID tokens and has no
+        JWKS, and inventing `jwks_uri` or `id_token_signing_alg_values_supported`
+        to look more OIDC-shaped would advertise endpoints that do not exist.
+        Everything a client actually needs to authenticate — issuer, authorize,
+        token, register — is here and is what it came looking for.
+        """
+        return JSONResponse(_authorization_server_metadata())
 
 
 @app.middleware("http")
