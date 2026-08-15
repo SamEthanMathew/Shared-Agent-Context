@@ -66,7 +66,11 @@ PLANS: dict[str, Plan] = {
     FREE: Plan(
         name=FREE,
         label="Free",
-        max_contexts=_limit_env("SAC_FREE_MAX_CONTEXTS", 1),
+        # Three, not one. One context is not a trial of a product about carrying
+        # knowledge between projects — you cannot see what it does until you have
+        # a second one to switch to, and it made the tool that creates a context
+        # fail for anyone on Free, including a directory reviewer exercising it.
+        max_contexts=_limit_env("SAC_FREE_MAX_CONTEXTS", 3),
         max_members=_limit_env("SAC_FREE_MAX_MEMBERS", 3),
         max_agents=_limit_env("SAC_FREE_MAX_AGENTS", 3),
         max_memories_per_context=_limit_env("SAC_FREE_MAX_MEMORIES", 1_000),

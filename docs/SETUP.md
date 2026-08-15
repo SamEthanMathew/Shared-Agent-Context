@@ -438,7 +438,7 @@ member count.
 
 | Plan | Price | Allows |
 |---|---|---|
-| **Free** | $0 | 1 context, 3 members, 3 connected agents, 500 syncs/month |
+| **Free** | $0 | 3 contexts, 3 members, 3 connected agents, 500 syncs/month |
 | **Pro** | $8/user/month or $84/user/year | Unlimited contexts, members, agents |
 | **Enterprise** | custom | Handled manually |
 

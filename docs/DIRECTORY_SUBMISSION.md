@@ -78,7 +78,7 @@ How it treats your data:
   anyone access. Only people can do that.
 - Nothing is deleted to enforce a plan limit.
 
-Free covers one context, three people and three connected assistants. Pro is $8
+Free covers three contexts, three people and three connected assistants. Pro is $8
 per person per month.
 ```
 
@@ -249,7 +249,12 @@ Paste these steps into the portal's test-access field:
    thinner at the weekend."
 5. Ask the question from step 3 again. The new decision is now included, and
    would be for any other assistant connected to the same context.
+6. Ask: "Make me a second context called Scratch, and switch to it."
+   Creating and switching both work on the Free plan this account is on.
 ```
+
+Every tool has been exercised against production through a real connector
+session on this account, and none returns a generic error.
 
 The address is on our own domain and forwards to a monitored inbox, so a
 reviewer who replies to anything reaches a person.
