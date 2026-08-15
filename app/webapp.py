@@ -100,6 +100,24 @@ def favicon():
     return FileResponse(icon, media_type="image/svg+xml")
 
 
+@router.get("/favicon.ico", include_in_schema=False)
+def favicon_ico():
+    """Browsers ask for this whatever the page's <link rel="icon"> says.
+
+    Two 404s on every first page load, in the access log for anyone reading it.
+    A PNG is served rather than a real .ico because every browser that still
+    requests this path accepts one, and the alternative is committing a second
+    copy of the mark in a format nothing else uses.
+    """
+    icon = SITE_ROOT / "assets" / "icon-64.png"
+    if not icon.is_file():
+        return HTMLResponse("", status_code=404)
+    return FileResponse(
+        icon, media_type="image/png",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
 @router.get("/app/assets/{filename}", include_in_schema=False)
 def asset(filename: str):
     """Serve a hashed build asset."""
